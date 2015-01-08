@@ -3,15 +3,22 @@
 ## INSTALLATION
 
 `> mkdir build`
+
 `> cd build`
+
 `> cmake ..`
+
 `> make`
+
 `> demo/demo path/to/some/image.png`
 
 The Demo program will write a couple of PNGs with debug vision
 data.
+
 The shared library can be easily integrated into you build system.
+
 It has no external dependencies.
+
 A C++11 compatible compiler is needed to run the software.
 
 ## LICENSE 
@@ -21,6 +28,7 @@ Copyright (c) 2014 Nao-Team HTWK.  All rights reserved.
 Redistribution and use in source and binary forms, with or without 
 modification, are permitted provided that the following conditions 
 are met:
+
 1. Redistributions of source code must retain the above copyright
    notice, this list of conditions and the following disclaimer.
 
@@ -31,7 +39,7 @@ are met:
 
 3. The end-user documentation included with the redistribution, if 
    any, must include the following acknowledgment:
-   "This product includes software developed by  o-Team HTWK
+   "This product includes software developed by Nao-Team HTWK
    (http://www.htwk-robots.de)."
    Alternately, this acknowledgment may appear in the software 
    itself, if and wherever such third-party acknowledgments 
