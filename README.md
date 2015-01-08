@@ -2,15 +2,13 @@
 
 ## INSTALLATION
 
-`> mkdir build`
-
-`> cd build`
-
-`> cmake ..`
-
-`> make`
-
-`> demo/demo path/to/some/image.png`
+```
+> mkdir build
+> cd build
+> cmake ..
+> make
+> demo/demo path/to/some/image.png
+```
 
 The Demo program will write a couple of PNGs with debug vision
 data.
