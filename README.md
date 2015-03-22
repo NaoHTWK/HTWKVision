@@ -38,7 +38,7 @@ are met:
 3. The end-user documentation included with the redistribution, if 
    any, must include the following acknowledgment:
    "This product includes software developed by Nao-Team HTWK
-   (http://www.htwk-robots.de)."
+   (http://www.htwk-robots.de )."
    Alternately, this acknowledgment may appear in the software 
    itself, if and wherever such third-party acknowledgments 
    normally appear.
