@@ -53,7 +53,7 @@ void RobotClassifier::proceed(const uint8_t * const img, Rect r, classifierResul
 }
 
 
-team_color_t RobotClassifier::determineTeamColor(const uint8_t * const img,Rect r) const {
+TeamMembership RobotClassifier::determineTeamColor(const uint8_t * const img,Rect r) const {
     int mid=0,cnt=0;
     int maxCb=0,maxCr=0;
     int stepSizeX=max(2,(r.xRight-r.xLeft)/18);
@@ -83,8 +83,8 @@ team_color_t RobotClassifier::determineTeamColor(const uint8_t * const img,Rect 
         lastSumCb=sumCb;
     }
     if(cnt==0)
-        return ROBOT_TEAM_NONE;//Rechteck zu schmal
-    return ((maxCb-maxCr)-mid/cnt)>0?ROBOT_TEAM_BLUE:ROBOT_TEAM_RED;
+        return TeamMembership::NONE;//Rechteck zu schmal
+    return ((maxCb-maxCr)-mid/cnt)>0?TeamMembership::BLUE:TeamMembership::RED;
 }
 
 
