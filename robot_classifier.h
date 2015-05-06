@@ -6,7 +6,6 @@
 #include <vector>
 
 #include <classifier.h>
-#include <gamestatetypes.h>
 #include <range_check.h>
 #include <rect.h>
 
@@ -17,6 +16,12 @@
 #define HISTOGRAM_SHIFT_COLOR 2
 
 namespace htwk {
+
+enum class TeamMembership {
+    NONE,
+    BLUE,
+    RED
+};
 
 struct classifierResult{
     Rect rect;
@@ -31,7 +36,7 @@ struct classifierResult{
         float entropy_linesum_X_signed;
         float entropy_linesum_Y_signed;
     } features;
-    team_color_t teamColor;
+    TeamMembership teamColor;
 };
 
 class RobotClassifier {
@@ -90,7 +95,7 @@ private:
     float getGradientEntropy_normLineSum_Y_Direction_Signed(const ycbcr32_t *normImage);
 
 
-    team_color_t determineTeamColor(const uint8_t * const img,Rect r) const;
+    TeamMembership determineTeamColor(const uint8_t * const img,Rect r) const;
 
 public:
     inline void setY(uint8_t * const img, int32_t x, int32_t y, uint8_t c) const
