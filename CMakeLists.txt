@@ -1,8 +1,9 @@
 cmake_minimum_required (VERSION 2.6)
 project (HTWKVision)
 
-set(CMAKE_CXX_COMPILER "clang++")
-set(CMAKE_CXX_FLAGS "-O3 -Wall -std=c++11")
+option(BUILD_DEMO_APP "Build the demo application which process a PNG and shows it had detected." ON)
+
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -Wall -std=c++11")
 
 include_directories(".")
 add_library(HTWKVision SHARED
@@ -21,5 +22,7 @@ add_library(HTWKVision SHARED
   robot_area_detector.cpp
   robot_classifier.cpp)
 
-add_subdirectory(demo)
-add_subdirectory(lodepng)
+if(BUILD_DEMO_APP)
+    add_subdirectory(demo)
+    add_subdirectory(lodepng)
+endif(BUILD_DEMO_APP)
