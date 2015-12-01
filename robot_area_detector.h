@@ -1,75 +1,69 @@
-#ifndef __ROBOT_AREA_DETECTOR_H__
-#define __ROBOT_AREA_DETECTOR_H__
+#ifndef __ROBOTAREADETECTOR_H__
+#define __ROBOTAREADETECTOR_H__
 
-#include <cstdint>
+#include <stdint.h>
+#include <x86intrin.h>
+
 #include <vector>
 
-#include <ball_detector.h>
-#include <field_color_detector.h>
+#include <robotrect.h>
 #include <goalpost.h>
-#include <rect.h>
+
+#include <ball_detector.h>
+#include <base_detector.h>
 #include <region_classifier.h>
+#include <classifier.h>
 
 namespace htwk {
 
-class RobotAreaDetector{
+class RobotAreaDetector : protected BaseDetector
+{
 private:
+    static constexpr int minBorderHeight=8;
+    static constexpr float minGreenRatio=0.5;
+    static constexpr int fieldMapScale=2;
     RobotAreaDetector(RobotAreaDetector& l);
     void operator=(RobotAreaDetector const&);
+	int scanlineCnt;
+	int fieldMapWidth;
+	int fieldMapHeight;
+    int fieldMapWidthSSE;
+    uint8_t *fieldMap;
+	int *fieldMapIntegral;
+    std::vector<RobotRect> *robotAreas;
 
-    int width;
-    int height;
-    int minRobotRegions;
-    int minRobotHeight;
-    int minRobotWidth;
-    int minRobotArea;
-    int  scanlineCnt;
-    int *robotAreaYTop;
-    int *robotAreaYBottom;
-    int *robotAreaYTmp;
-    std::vector<Rect> *robotAreas;
+    __m128i* yout;
+    __m128i* uout;
+    __m128i* vout;
 
-    int *lutCb;
-    int *lutCr;
+    struct Boundries {
+        __m128i minCy;
+        __m128i minCb;
+        __m128i minCr;
+        __m128i maxCy;
+        __m128i maxCb;
+        __m128i maxCr;
+    };
 
-    inline uint8_t getY(const uint8_t * const img,int32_t x,int32_t y) const __attribute__((nonnull)) __attribute__((pure)){
-        CHECK_RANGE(x,0,width-1);
-        CHECK_RANGE(y,0,height-1);
-        return img[(x+y*width)<<1];
-    }
-    inline uint8_t getCb(const uint8_t * const img,int32_t x,int32_t y) const __attribute__((nonnull)) __attribute__((pure)){
-        CHECK_RANGE(x,0,width-1);
-        CHECK_RANGE(y,0,height-1);
-        return img[((x+y*width)<<1)+lutCb[x]];
-    }
-    inline uint8_t getCr(const uint8_t * const img,int32_t x,int32_t y) const __attribute__((nonnull)) __attribute__((pure)){
-        CHECK_RANGE(x,0,width-1);
-        CHECK_RANGE(y,0,height-1);
-        return img[((x+y*width)<<1)+lutCr[x]];
-    }
+    void createGreenMapSSEBatch(const uint8_t * const img, FieldColorDetector *field, int x, int y);
+    void createGreenMapSSECompare(Boundries& b, int x, int y);
+    void createGreenMap(const int * const fieldborder, const uint8_t * const img, FieldColorDetector *field);
+    void createGreenMapSSE(const int * const fieldborder, const uint8_t * const img, FieldColorDetector *field);
+    void createIntegralImage();
+    float getIntegralValue(int px1, int py1, int px2, int py2);
+
 public:
-    inline void setY(uint8_t * const img,int32_t x,int32_t y, uint8_t c) const __attribute__((nonnull)) {
-        CHECK_RANGE(x,0,width-1);
-        CHECK_RANGE(y,0,height-1);
-        img[(x+y*width)<<1]=c;
-    }
+    RobotAreaDetector(int width, int height, int8_t *lutCb, int8_t *lutCr, int scanlineCnt) __attribute__((nonnull));
+    ~RobotAreaDetector() {}
 
-    RobotAreaDetector(int width, int height, int *lutCb, int *lutCr, int scanlineCnt) __attribute__((nonnull));
-    ~RobotAreaDetector();
-
-    static bool isBall(int x, int y, const Ball &ball);
-    static bool isInGoal(std::vector<GoalPost> goalPosts, Rect r);
-
-    void proceed(const uint8_t * const img, Scanline *scanVertical, const int * const fieldborder,
+    double proceed(uint8_t * const img, Scanline *scanVertical, const int * const fieldborder,
                 FieldColorDetector *field, const Ball &ball, const std::vector<GoalPost> &goalPosts) __attribute__((nonnull));
-    void morphMax(int *data);
-    void morphMin(int *data);
-    void searchRobotAreas(Scanline *scanVertical);
-    int searchRobotBorder(const int * const fieldborder, const uint8_t * const img, FieldColorDetector *field,
-                          const Ball &ball, Rect r, int xStart, int dx) const;
-    std::vector<Rect> *getRobotAreas();
+    std::vector<RobotRect> searchRobotHypotheses(Scanline *scanVertical, const int * const fieldborder);
+    std::vector<RobotRect> setCarpetFeatures(std::vector<RobotRect> hypotheses);
+
+    std::vector<RobotRect> *getRobotAreas();
 };
 
-}  // namespace htwk
+}
 
-#endif  // __ROBOT_AREA_DETECTOR_H__
+#endif

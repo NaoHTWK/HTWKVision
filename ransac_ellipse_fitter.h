@@ -36,8 +36,8 @@ public:
     float getRating(std::vector<LineSegment*> carryover, Ellipse e);
     float ransacFit(std::vector<LineSegment*> &carryover, std::vector<LineSegment*> &lineEdgeSegments, float ellipse[6], int iter, unsigned int minMatches);
     Ellipse &getEllipse();
-    float getCamPitch() const { return camPitch; } ;
-    float getCamRoll()  const { return camRoll;  };
+    float getCamPitch() const { return camPitch; }
+    float getCamRoll()  const { return camRoll;  }
 };
 
 }  // namespace htwk

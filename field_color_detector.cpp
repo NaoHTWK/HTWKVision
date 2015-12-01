@@ -3,6 +3,8 @@
 #include <cstdlib>
 #include <cstring>
 
+#include <deque>
+
 #include <ext_math.h>
 
 using namespace ext_math;
@@ -11,15 +13,32 @@ using namespace std;
 namespace htwk {
 
 const int FieldColorDetector::pixelSpacing=16;	//nur jeden 16ten Pixel in x- und y-Richtung scannen
-const int FieldColorDetector::minFieldArea=150;
-const int FieldColorDetector::colorBorder=8;
+const int FieldColorDetector::minFieldArea=150; //min amount of pixels for initial green seed / carpet color detection
+const int FieldColorDetector::colorBorder=8;	//exclude extrem color values (0+colorBorder) < color < (255-colorBorder)
+const float FieldColorDetector::greenGain=2.0;	//gain for green threshold in maybeGreen function
+const float FieldColorDetector::thetas[62]={-0.003928473492851304, 0.3267591297421786, 0.15024038619767252, -0.0026580701516830778, -0.06626938819648565,
+											-0.0918234800891045, -0.007024391380169659, -0.19444191475988953, 0.10805971362794498, -0.013870596388515415,
+											0.020367431009978596, 0.5006415354683456, 0.0523626396220556, 0.06796659398791673, 0.13091006086089688,
+											-0.04015537555250251, 0.2534669682609816, 0.22259232118528924, 0.08825125863663277, -0.06163688650966539,
+											0.18292785975365364, 0.18490873559957913, 0.1308039353774413, 0.15043700747876884, -0.030408070393040373,
+											-0.18234162918227365, 0.30516577669883815, -0.060749446765493896, 0.473586856960429, 0.31872308251277015,
+											-0.04073046667475529, -0.157079077089501, -0.4325757850385499, 0.04335112440158662, 0.05425490604442203,
+											-0.21977115232887673, 0.06711078780969373, -0.08743680491075988, -0.07236939332440999, 0.03686565322899083,
+											-0.0034490299130395608, -0.1224550945463936, 0.14004650713616937, 0.053306649062165465, 0.20536885019856824,
+											0.010868449852810068, 0.14466029588975235, 0.08223414822611032, 0.09088654555978222, 0.12192354321809107,
+											-0.15900537301205442, -0.07653902693746543, -0.13043295430645066, 0.10422567492674986, 0.12357034980655468,
+											0.06425325379992515, 0.1547906519403598, -0.11945473558477798, -0.15195968390312445, -0.060779372474056875,
+											-0.06570198431532723, 0.07563040487570107};
 
-FieldColorDetector::FieldColorDetector(int _width, int _height, int *_lutCb, int *_lutCr):
-		width(_width),height(_height),lutCb(_lutCb),lutCr(_lutCr){
+
+FieldColorDetector::FieldColorDetector(int _width, int _height, int8_t *_lutCb, int8_t *_lutCr)
+    : BaseDetector(_width, _height, _lutCb, _lutCr)
+{
 	greenCy=0;
 	greenCr=0;
 	greenCb=0;
 	resetArrays();
+
 }
 
 FieldColorDetector::~FieldColorDetector(){
@@ -32,176 +51,113 @@ FieldColorDetector::~FieldColorDetector(){
 void FieldColorDetector::proceed(const uint8_t * const img) {
 	resetArrays();
 	searchInitialSeed(img);
-
-	for(int y=0;y<height;y+=pixelSpacing){
-		for(int x=0;x<width;x+=pixelSpacing){
-			int cy=((getY(img,x,y)-seedY)>>2)+HIST_SIZE/2;
-			if(cy<0||cy>=HIST_SIZE)continue;
-			int cb=((getCb(img,x,y)-seedCb)>>1)+HIST_SIZE/2;
-			if(cb<0||cb>=HIST_SIZE)continue;
-			int cr=((getCr(img,x,y)-seedCr)>>1)+HIST_SIZE/2;
-			if(cr<0||cr>=HIST_SIZE)continue;
-			histYCbCr[cy+cb*HIST_SIZE+cr*HIST_SIZE*HIST_SIZE]++;
-		}
+	extractFeatures(img,features);
+	setYCbCrCube(features);
+}
+/**
+ * dynamic YCbCr-cube size estimation used for green classification
+ * (offline training by CMA-ES optimization using 200 labeled color settings)
+ */
+void FieldColorDetector::setYCbCrCube(float* features){
+	int idx=0;
+	float minCy=25+50*thetas[idx++];
+	float minCb=8+15*thetas[idx++];
+	float minCr=8+15*thetas[idx++];
+	for(int j=1;j<=NUM_FEATURES;j++){
+		float feature=pow(features[j-1],1.3+thetas[idx++]);
+		minCy+=100*thetas[idx++]*feature;
+		minCb+=30*thetas[idx++]*feature;
+		minCr+=30*thetas[idx++]*feature;
 	}
+	if(minCy<1)minCy=1;
+	if(minCy>80)minCy=80;
+	if(minCb<1)minCb=1;
+	if(minCb>30)minCb=30;
+	if(minCr<1)minCr=1;
+	if(minCr>30)minCr=30;
+	this->minCy=(int)(greenCy-minCy);
+	this->minCb=(int)(greenCb-minCb);
+	this->minCr=(int)(greenCr-minCr);
+	this->minCy2=(int)(greenCy-minCy*greenGain);
+	this->minCb2=(int)(greenCb-minCb*greenGain);
+	this->minCr2=(int)(greenCr-minCr*greenGain);
 
-	smoothHist(histYCbCr,histYCbCrSmooth);
-	smoothHist(histYCbCrSmooth,histYCbCrSmooth2);
-
-	for(int cy=0;cy<HIST_SIZE;cy++){
-		for(int cb=0;cb<HIST_SIZE;cb++){
-			for(int cr=0;cr<HIST_SIZE;cr++){
-				int addr=cy+cb*HIST_SIZE+cr*HIST_SIZE*HIST_SIZE;
-				histYCbCrSmooth[addr]-=(histYCbCrSmooth2[addr]>>6);
+	float maxCy=25+50*thetas[idx++];
+	float maxCb=8+15*thetas[idx++];
+	float maxCr=8+15*thetas[idx++];
+	for(int j=1;j<=NUM_FEATURES;j++){
+		float feature=pow(features[j-1],1.3+thetas[idx++]);
+		maxCy+=100*thetas[idx++]*feature;
+		maxCb+=30*thetas[idx++]*feature;
+		maxCr+=30*thetas[idx++]*feature;
+	}
+	if(maxCy<1)maxCy=1;
+	if(maxCy>80)maxCy=80;
+	if(maxCb<1)maxCb=1;
+	if(maxCb>30)maxCb=30;
+	if(maxCr<1)maxCr=1;
+	if(maxCr>30)maxCr=30;
+	this->maxCy=(int)(greenCy+maxCy);
+	this->maxCb=(int)(greenCb+maxCb);
+	this->maxCr=(int)(greenCr+maxCr);
+	this->maxCy2=(int)(greenCy+maxCy*greenGain);
+	this->maxCb2=(int)(greenCb+maxCb*greenGain);
+	this->maxCr2=(int)(greenCr+maxCr*greenGain);
+}
+/**
+ * extraction of image features
+ */
+void FieldColorDetector::extractFeatures(const uint8_t * const img, float* features){
+	int cnt=0;
+	float meanY=0;
+	float varY=0;
+	float varCb=0;
+	float varCr=0;
+	float sumGreen1=0;
+	float sumGreen2=0;
+	for(int y=pixelSpacing/2;y<height;y+=pixelSpacing){
+		for(int x=pixelSpacing/2;x<width;x+=pixelSpacing){
+			int cy=getY(img,x,y);
+			int cb=getCb(img,x,y);
+			int cr=getCr(img,x,y);
+			meanY+=cy;
+			varCb+=(cb-128)*(cb-128);
+			varCr+=(cr-128)*(cr-128);
+			if(abs(cr-seedCr)<=2&&abs(cb-seedCb)<=2&&abs(cy-seedY)<=2){
+				sumGreen2++;
+				if(abs(cr-seedCr)<=1&&abs(cb-seedCb)<=1&&abs(cy-seedY)<=1){
+					sumGreen1++;
+				}
 			}
+			cnt++;
 		}
 	}
+	sumGreen1/=cnt;
+	sumGreen2/=cnt;
+	varCb=sqrtf(varCb/cnt);
+	varCr=sqrtf(varCr/cnt);
+	meanY/=cnt;
+	for(int y=pixelSpacing/2;y<height;y+=pixelSpacing){
+		for(int x=pixelSpacing;x<width;x+=pixelSpacing){
+			int cy=getY(img,x,y);
+			varY+=(cy-meanY)*(cy-meanY);
+		}
+	}
+	varY=sqrtf(varY/cnt);
+	features[0]=greenCy/256;
+	features[1]=varY/32;
+	features[2]=varCb/16;
+	features[3]=varCr/16;
+	features[4]=sumGreen1*50;
+	features[5]=sumGreen2*25;
+	features[6]=(sumGreen2-sumGreen1)*50;
 
-	createLUT(histYCbCrSmooth);
 }
 
-void FieldColorDetector::createLUT(const int* const hist){
-		int mCy=HIST_SIZE/2;
-		int mCb=HIST_SIZE/2;
-		int mCr=HIST_SIZE/2;
-		for(int i=0;i<HIST_SIZE/3;i++){
-			int h=hist[mCy+mCb*HIST_SIZE+mCr*HIST_SIZE*HIST_SIZE];
-			int maxH=h;
-			int bestCy=0;
-			int bestCb=0;
-			int bestCr=0;
-			for(int dCy=-2;dCy<=2;dCy++){
-				for(int dCb=-2;dCb<=2;dCb++){
-					for(int dCr=-2;dCr<=2;dCr++){
-						int ny=mCy+dCy;
-						if(ny<0||ny>=HIST_SIZE)continue;
-						int nb=mCb+dCb;
-						if(nb<0||nb>=HIST_SIZE)continue;
-						int nr=mCr+dCr;
-						if(nr<0||nr>=HIST_SIZE)continue;
-						int ch=hist[ny+nb*HIST_SIZE+nr*HIST_SIZE*HIST_SIZE];
-						if(ch>maxH){
-							bestCy=ny;
-							bestCb=nb;
-							bestCr=nr;
-							maxH=ch;
-						}
-					}
-				}
-			}
-			if(maxH==h)break;
-			mCy=bestCy;
-			mCb=bestCb;
-			mCr=bestCr;
-		}
 
-		greenCy=clamp(colorBorder,seedY+((mCy-HIST_SIZE/2)<<2),255-colorBorder);
-		greenCb=clamp(colorBorder,seedCb+((mCb-HIST_SIZE/2)<<1),255-colorBorder);
-		greenCr=clamp(colorBorder,seedCr+((mCr-HIST_SIZE/2)<<1),255-colorBorder);
-		vector<color> s;
-		vector<color> entries;
-		{
-			color c;
-			c.cy=mCy;
-			c.cb=mCb;
-			c.cr=mCr;
-			s.push_back(c);
-		}
-		lut[mCy+mCb*HIST_SIZE+mCr*HIST_SIZE*HIST_SIZE]=1;
-		while(!s.empty()){
-			color p=s.front();
-			s.erase(s.begin());
-			entries.push_back(p);
-			for(int dCy=-1;dCy<=1;dCy++){
-				for(int dCb=-1;dCb<=1;dCb++){
-					for(int dCr=-1;dCr<=1;dCr++){
-						if(abs(dCy)+abs(dCb)+abs(dCr)>1)continue;
-						int ny=p.cy+dCy;
-						if(ny<0||ny>=HIST_SIZE)continue;
-						int nb=p.cb+dCb;
-						if(nb<0||nb>=HIST_SIZE)continue;
-						int nr=p.cr+dCr;
-						if(nr<0||nr>=HIST_SIZE)continue;
-						int addr=ny+nb*HIST_SIZE+nr*HIST_SIZE*HIST_SIZE;
-						if(lut[addr]>0)continue;
-						int nh=hist[addr];
-						if(nh>0){
-							{
-								color c;
-								c.cy=ny;
-								c.cb=nb;
-								c.cr=nr;
-								s.push_back(c);
-							}
-							lut[ny+nb*HIST_SIZE+nr*HIST_SIZE*HIST_SIZE]=1;
-						}
-					}
-				}
-			}
-		}
-		smoothLUT(entries,2);
-		smoothLUT(entries,2);
-	}
-
-void FieldColorDetector::smoothLUT(vector<color> &entries, int r){
-	vector<color> entries2;
-	for(const color &c : entries){
-		entries2.push_back(c);
-	}
-	for(const color &c : entries2){
-		for(int dCy=-1;dCy<=1;dCy++){
-			for(int dCb=-1;dCb<=1;dCb++){
-				for(int dCr=-1;dCr<=1;dCr++){
-					if(abs(dCy)+abs(dCb)+abs(dCr)>r)continue;
-					int ny=c.cy+dCy;
-					if(ny<0||ny>=HIST_SIZE)continue;
-					int nb=c.cb+dCb;
-					if(nb<0||nb>=HIST_SIZE)continue;
-					int nr=c.cr+dCr;
-					if(nr<0||nr>=HIST_SIZE)continue;
-					int addr=ny+nb*HIST_SIZE+nr*HIST_SIZE*HIST_SIZE;
-					if(lut[addr]>0)continue;
-					lut[addr]=1;
-					{
-						color c;
-						c.cy=ny;
-						c.cb=nb;
-						c.cr=nr;
-						entries.push_back(c);
-					}
-				}
-			}
-		}
-	}
-}
-
-void FieldColorDetector::smoothHist(const int* const histSrc, int* histDest){
-	int t=4;
-	int rCy=2;
-	int rCb=2;
-	int rCr=1;
-	for(int cy=rCy;cy<HIST_SIZE-rCy;cy++){
-		for(int cb=rCb;cb<HIST_SIZE-rCb;cb++){
-			for(int cr=rCr;cr<HIST_SIZE-rCr;cr++){
-				int c=histSrc[cy+cb*HIST_SIZE+cr*HIST_SIZE*HIST_SIZE];
-				if(c>t){
-					for(int dCy=-rCy;dCy<=rCy;dCy++){
-						for(int dCb=-rCb;dCb<=rCb;dCb++){
-							for(int dCr=-rCr;dCr<=rCr;dCr++){
-								int ny=cy+dCy;
-								int nb=cb+dCb;
-								int nr=cr+dCr;
-								histDest[ny+nb*HIST_SIZE+nr*HIST_SIZE*HIST_SIZE]+=c;
-							}
-						}
-					}
-
-				}
-			}
-		}
-	}
-}
-
+/**
+ * dominant color search for green detection
+ */
 void FieldColorDetector::searchInitialSeed(const uint8_t * const img){
 
 	//building histogram of all cr-channel
@@ -244,17 +200,15 @@ void FieldColorDetector::searchInitialSeed(const uint8_t * const img){
 	}
 	//finding initial y-value (later used as a seed color)
 	seedY=clamp(colorBorder,getPeak(histY),255-colorBorder);
-
+	greenCy=seedY;
+	greenCb=seedCb;
+	greenCr=seedCr;
 }
 
 void FieldColorDetector::resetArrays() {
     memset(histY,0,sizeof(histY));
     memset(histCb,0,sizeof(histCb));
     memset(histCr,0,sizeof(histCr));
-    memset(lut,0,sizeof(lut));
-    memset(histYCbCr,0,sizeof(histYCbCr));
-    memset(histYCbCrSmooth,0,sizeof(histYCbCrSmooth));
-    memset(histYCbCrSmooth2,0,sizeof(histYCbCrSmooth2));
 }
 
 /**
@@ -285,30 +239,6 @@ int FieldColorDetector::getPeak(const int* const hist) {
 		}
 	}
 	return maxIdx;
-}
-
-/**
- * test, if a given yuv-color matches the field-color (used to detect all pixels on the carpet)
- */
-bool FieldColorDetector::isGreen(int cyReal, int cbReal, int crReal) const {
-	int cy=((cyReal-seedY)>>2)+HIST_SIZE/2;
-	if(cy<0||cy>=HIST_SIZE)return false;
-	int cb=((cbReal-seedCb)>>1)+HIST_SIZE/2;
-	if(cb<0||cb>=HIST_SIZE)return false;
-	int cr=((crReal-seedCr)>>1)+HIST_SIZE/2;
-	if(cr<0||cr>=HIST_SIZE)return false;
-	if(lut[cy+cb*HIST_SIZE+cr*HIST_SIZE*HIST_SIZE]>0){
-		return true;
-	}
-	return false;
-}
-
-color FieldColorDetector::getColor() const {
-	color c;
-	c.cy=greenCy;
-	c.cb=greenCb;
-	c.cr=greenCr;
-	return c;
 }
 
 }  // namespace htwk

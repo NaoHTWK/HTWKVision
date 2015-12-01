@@ -27,7 +27,7 @@ private:
     static ext_math::vec2df mmul(const ext_math::vec2df &a, const ext_math::vec2df &b);
 
 public:
-    Classifier(std::string weightFile);
+    explicit Classifier(std::string weightFile);
     ext_math::vec2df proceed(const ext_math::vec2df &pixels);
 };
 

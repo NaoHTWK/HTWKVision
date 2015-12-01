@@ -11,7 +11,8 @@ using namespace std;
 
 namespace htwk {
 
-FeetDetector::FeetDetector(int _width, int _height, int * _lutCb, int * _lutCr):
+FeetDetector::FeetDetector(int _width, int _height, int8_t *_lutCb, int8_t *_lutCr)
+    : BaseDetector(_width, _height, _lutCb, _lutCr),
     patternWidth(100), /** TODO: Thomas: why does this not depend on the resolution? */
     patternHeight(30),
     minRating(0.12),
@@ -20,11 +21,8 @@ FeetDetector::FeetDetector(int _width, int _height, int * _lutCb, int * _lutCr):
     found(false),
     avgX(feetX),
     avgY(feetY),
-    avgAvailable(true),
-    width(_width),
-    height(_height),
-    lutCb(_lutCb),
-    lutCr(_lutCr) {
+    avgAvailable(true)
+{
     if (width <= 0 || height <= 0) {
         fprintf(stderr, "Error: tried to allocate a array of length 0 or smaller file %s line %d. Exiting.", __FILE__, __LINE__);
         exit(EXIT_FAILURE);
@@ -93,7 +91,7 @@ void FeetDetector::proceed(const uint8_t* const img, FieldColorDetector *field, 
             int cb=getCb(img,x,y);
             int cr=getCr(img,x,y);
 
-            if(field->isGreen(cy,cb,cr)){
+            if(field->maybeGreen(cy,cb,cr)){
                 gapCnt++;
                 if(gapCnt>maxGap){
                     ballY=y+gapCnt;
@@ -118,7 +116,7 @@ void FeetDetector::proceed(const uint8_t* const img, FieldColorDetector *field, 
         feetRatingRaw[i]=1E10;
     }
     for(int i=patternWidth/2;i<width-patternWidth/2;i++){
-        int sum=0;
+        double sum=0;
         for(int j=-patternWidth/2;j<patternWidth/2;j++){
             int feetY=feetBorder[(i+j)/q]-feetBorder[i/q];
             int patternY=footPattern[j+patternWidth/2];
@@ -192,9 +190,11 @@ void FeetDetector::proceed(const uint8_t* const img, FieldColorDetector *field, 
     }
     feetX=bestX;
     feetY=bestY;
+//    avgY=400;
     if(found){
         avgX=avgX*.75f+feetX*.25f;
         avgY=avgY*.75f+feetY*.25f;
+//        printf("feet found: %f, %f\n",avgX,avgY);
     }
 }
 

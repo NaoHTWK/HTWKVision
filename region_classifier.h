@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <vector>
 
+#include <base_detector.h>
 #include <field_color_detector.h>
 #include <linesegment.h>
 #include <point_2d.h>
@@ -26,41 +27,15 @@ struct Scanline{
 	int link[maxEdgesPerScanline];
 };
 
-class RegionClassifier{
+class RegionClassifier : protected BaseDetector
+{
 private:
-	int *lutCb;
-	int *lutCr;
-	const int width_;
-	const int height_;
-
-	inline uint8_t getY(uint8_t *img,int32_t x,int32_t y) const __attribute__((nonnull)) __attribute__((pure)){
-		CHECK_RANGE(x,0,width_-1);
-		CHECK_RANGE(y,0,height_-1);
-		return img[(x+y*width_)<<1];
-	}
-	inline uint8_t getCb(uint8_t *img,int32_t x,int32_t y) const __attribute__((nonnull)) __attribute__((pure)){
-		CHECK_RANGE(x,0,width_-1);
-		CHECK_RANGE(y,0,height_-1);
-		return img[((x+y*width_)<<1)+lutCb[x]];
-	}
-	inline uint8_t getCr(uint8_t *img,int32_t x,int32_t y) const __attribute__((nonnull)) __attribute__((pure)){
-		CHECK_RANGE(x,0,width_-1);
-		CHECK_RANGE(y,0,height_-1);
-		return img[((x+y*width_)<<1)+lutCr[x]];
-	}
-
-	RegionClassifier();
+    RegionClassifier();
 	RegionClassifier(const RegionClassifier & cpy);
 	RegionClassifier operator= (RegionClassifier & cpy);
+
 public:
-
-    inline void setY(uint8_t* const img, const int32_t x,int32_t y, const uint8_t c) __attribute__((nonnull)){
-        CHECK_RANGE(x,0,width-1);
-        CHECK_RANGE(y,0,height-1);
-        img[(x+y*width_)<<1]=c;
-    }
-
-	static const int lineSpacing=16;
+    static const int lineSpacing=16;
     static const int matchRadius=2;
     static const int searchRadius=2;
     static const int searchLen=8;
@@ -75,11 +50,11 @@ public:
     int pattern[matchRadius*2+1];
 	std::vector<LineSegment*> *lineSegments;
 
-	RegionClassifier(int *lutCb, int *lutCr, int width, int height) __attribute__((nonnull));
+    RegionClassifier(int width, int height, int8_t *lutCb, int8_t *lutCr) __attribute__((nonnull));
 	~RegionClassifier();
 
     static int getLineSpacing() { return lineSpacing; }
-    int getScanVerticalSize() { return width_/lineSpacing; }
+    int getScanVerticalSize() { return width/lineSpacing; }
 	static void classifyGreenRegions(Scanline *sl, FieldColorDetector *field) __attribute__((nonnull));
 	static void classifyWhiteRegions(Scanline *sl) __attribute__((nonnull));
 	bool addEdge(uint8_t *img, Scanline *scanline, int xPeak, int yPeak, int edgeIntensity, bool optimize) const __attribute__((nonnull));

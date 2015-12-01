@@ -11,45 +11,42 @@ using namespace std;
 
 namespace htwk {
 
-RobotClassifier::RobotClassifier(int width, int height, int *lutCb,
-        int *lutCr) : width(width), height(height) {
-    this->lutCb = lutCb;
-    this->lutCr = lutCr;
+RobotClassifier::RobotClassifier(int width, int height, int8_t *lutCb, int8_t *lutCr)
+    : BaseDetector(width, height, lutCb, lutCr)
+{
     this->histolength = (256 * 2) >> HISTOGRAM_SHIFT_GRADIENT;
-    robotClassifierNN=new Classifier("../data/net_Robots_Martin_1P2N+Small_do0.5_hidden4_bs3000_bi64_iter1000_l1.0E-6.net");
+    robotClassifierNN=new Classifier("./data/net_Robots_IntegralRectsD2_do0.5_hidden4_bs3000_bi64_iter1000_l1.0E-6.net");
 }
 
-
-RobotClassifier::~RobotClassifier() {
-}
-
-
-void RobotClassifier::proceed(const uint8_t * const img, Rect r, classifierResult &result) {
-    result.rect = r;
+void RobotClassifier::proceed(const uint8_t * const img, RobotRect &r, RobotClassifierResult &result) {
+    result.rect.xLeft = r.xLeft;
+    result.rect.xRight = r.xRight;
+    result.rect.yBottom = r.yBottom;
+    result.rect.yTop = r.yTop;
     ycbcr32_t normImage[NORMWIDTH * NORMHEIGHT];
 
     generateNormImage(img, r, normImage);
 
-    result.features.color_mean_squared_deviation_Y_channel=calcMeanDeviation(normImage);
-    float *gradHist=getGradientHistogramm_Y_Direction(normImage);
+    result.features.color_mean_squared_deviation_Y_channel = calcMeanDeviation(normImage);
+    float *gradHist = getGradientHistogramm_Y_Direction(normImage);
     result.features.entropy_Y = getGradientEntropy_Y_Direction(gradHist, histolength);
+
     free(gradHist);
+
     float **colHist=getColorHistograms(normImage);
     result.features.entropy_cl_Y_channel = getColorEntropy(colHist, 256 >> HISTOGRAM_SHIFT_COLOR);
+
     for(int i=0;i<3;i++)
         free(colHist[i]);
     free(colHist);
+
     result.features.entropy_linesum_X = getGradientEntropy_normLineSum_X_Direction(normImage);
     result.features.entropy_linesum_X_signed = getGradientEntropy_normLineSum_X_Direction_Signed(normImage);
     result.features.entropy_linesum_Y_signed = getGradientEntropy_normLineSum_Y_Direction_Signed(normImage);
     result.features.entropy_X_signed = getGradientEntropySigned_X_Direction(normImage);
     result.features.entropy_Y_signed = getGradientEntropySigned_Y_Direction(normImage);
 
-    result.isRobot= isRobot(result);
-    if(result.isRobot){
-        result.teamColor=determineTeamColor(img,r);
-    }
-
+    result.detectionProbability= isRobot(result,r);
 }
 
 
@@ -68,8 +65,8 @@ TeamMembership RobotClassifier::determineTeamColor(const uint8_t * const img,Rec
             sumCb+=-3*(int)getY(img,dx,dy)+16*(int)getCb(img,dx,dy)+3*(int)getCr(img,dx,dy);
             sumCr+=-1*(int)getY(img,dx,dy)+2*(int)getCb(img,dx,dy)+16*(int)getCr(img,dx,dy);
             //use these when analyzing png
-//			sumCb+=-3*(int)img[(dx+dy*width)*3]+16*(int)img[(dx+dy*width)*3+1]+3*(int)img[(dx+dy*width)*3+2];
-//			sumCr+=-1*(int)img[(dx+dy*width)*3]+2*(int)img[(dx+dy*width)*3+1]+16*(int)img[(dx+dy*width)*3+2];
+            //			sumCb+=-3*(int)img[(dx+dy*width)*3]+16*(int)img[(dx+dy*width)*3+1]+3*(int)img[(dx+dy*width)*3+2];
+            //			sumCr+=-1*(int)img[(dx+dy*width)*3]+2*(int)img[(dx+dy*width)*3+1]+16*(int)img[(dx+dy*width)*3+2];
         }
         int minSumCb=min(lastSumCb,sumCb);
         int minSumCr=min(lastSumCr,sumCr);
@@ -82,8 +79,10 @@ TeamMembership RobotClassifier::determineTeamColor(const uint8_t * const img,Rec
         lastSumCr=sumCr;
         lastSumCb=sumCb;
     }
+
     if(cnt==0)
         return TeamMembership::NONE;//Rechteck zu schmal
+
     return ((maxCb-maxCr)-mid/cnt)>0?TeamMembership::BLUE:TeamMembership::RED;
 }
 
@@ -109,40 +108,37 @@ float RobotClassifier::getGradientEntropy_normLineSum_Y_Direction_Signed(
 }
 
 
-float RobotClassifier::getGradientEntropySigned_X_Direction(
-        const ycbcr32_t *normImage) {
-    float* hist = getBackTheSignedHist(
-            getGradientHistogramm_X_Direction(normImage), histolength);
+float RobotClassifier::getGradientEntropySigned_X_Direction(const ycbcr32_t *normImage) {
+    float* hist = getBackTheSignedHist(getGradientHistogramm_X_Direction(normImage), histolength);
     float entropy = 0;
+
     for (int i = 0; i < histolength; i++) {
         if (hist[i] > 0)
             entropy += hist[i] * log2f(hist[i]);
     }
+
     free(hist);
     return -entropy;
 }
 
 
-float* RobotClassifier::getGradientHistogramm_X_Direction(
-        const ycbcr32_t *normImage) {
+float* RobotClassifier::getGradientHistogramm_X_Direction(const ycbcr32_t *normImage) {
     int hist[histolength];
     memset(hist,0,sizeof(hist));
     int cnt = 0;
+
     for (int y = 0; y < NORMHEIGHT; y++) {
         for (int x = 0; x < NORMWIDTH-1; x++) {
             cnt++;
-            hist[(normImage[x+y*NORMWIDTH].y-normImage[x+1+y*NORMWIDTH].y+256)
-                    >> HISTOGRAM_SHIFT_GRADIENT]++;
+            hist[(normImage[x+y*NORMWIDTH].y-normImage[x+1+y*NORMWIDTH].y+256) >> HISTOGRAM_SHIFT_GRADIENT]++;
         }
     }
     return normHistogram(hist, (NORMWIDTH-1)*NORMHEIGHT, histolength);
 }
 
 
-float RobotClassifier::getGradientEntropySigned_Y_Direction(
-        const ycbcr32_t *normImage) {
-    float* hist = getBackTheSignedHist(
-            getGradientHistogramm_Y_Direction(normImage), histolength);
+float RobotClassifier::getGradientEntropySigned_Y_Direction(const ycbcr32_t *normImage) {
+    float* hist = getBackTheSignedHist(getGradientHistogramm_Y_Direction(normImage), histolength);
     float entropy = 0;
     for (int i = 0; i < histolength; i++) {
         if (hist[i] > 0)
@@ -153,8 +149,7 @@ float RobotClassifier::getGradientEntropySigned_Y_Direction(
 }
 
 
-float RobotClassifier::getGradientEntropy_normLineSum_X_Direction_Signed(
-        const ycbcr32_t *normImage) {
+float RobotClassifier::getGradientEntropy_normLineSum_X_Direction_Signed(const ycbcr32_t *normImage) {
     int cnt = 0;
     const int length = (256 * 2) >> HISTOGRAM_SHIFT_GRADIENT;
     int grad_hist[length];
@@ -174,8 +169,7 @@ float RobotClassifier::getGradientEntropy_normLineSum_X_Direction_Signed(
 }
 
 
-float RobotClassifier::getGradientEntropy_normLineSum_X_Direction(
-        const ycbcr32_t *normImage) {
+float RobotClassifier::getGradientEntropy_normLineSum_X_Direction(const ycbcr32_t *normImage) {
     int cnt = 0;
     const int length = (256 * 2) >> HISTOGRAM_SHIFT_GRADIENT;
     int grad_hist[length];
@@ -212,8 +206,7 @@ float RobotClassifier::processEntropy(float* grad_hist, int length) {
 }
 
 
-int RobotClassifier::normSum_X_Line(int y,
-        const ycbcr32_t *normImage) {
+int RobotClassifier::normSum_X_Line(int y, const ycbcr32_t *normImage) {
     int sum = 0;
     if(y>=NORMHEIGHT){
         perror("uebergebenes Argument groesser Normheight");
@@ -226,12 +219,11 @@ int RobotClassifier::normSum_X_Line(int y,
 }
 
 
-int RobotClassifier::normSum_Y_Line(int x,
-        const ycbcr32_t *normImage) {
+int RobotClassifier::normSum_Y_Line(int x, const ycbcr32_t *normImage) {
     int sum = 0;
     if(x>=NORMWIDTH){
-            perror("uebergebenes Argument groesser Normwidtlsdkfj");
-            exit(-1);
+        perror("uebergebenes Argument groesser Normwidtlsdkfj");
+        exit(-1);
     }
     for (int y = 1; y < NORMHEIGHT; y++) {
         sum += normImage[x + y * NORMWIDTH].y;
@@ -240,29 +232,27 @@ int RobotClassifier::normSum_Y_Line(int x,
 }
 
 
-void RobotClassifier::generateNormImage(const uint8_t * const img, Rect r,
-        ycbcr32_t * const normImage) const {
+void RobotClassifier::generateNormImage(const uint8_t * const img, RobotRect& r, ycbcr32_t * const normImage) const {
     int idx=0;
 
     for(int py=0;py<NORMHEIGHT;py++){
-        for(int px=0;px<NORMWIDTH;px++){
-            int x=(int)(round((NORMWIDTH-px-1)*r.xLeft/(NORMWIDTH-1)+px*r.xRight/(NORMWIDTH-1)));
-            int y=(int)(round((NORMHEIGHT-py-1)*(r.yTop*2+r.yBottom)/3/(NORMHEIGHT-1)+py*r.yBottom/(NORMHEIGHT-1)));
-            if(x<0||y<0||x>=width||y>=height){
-                idx++;
-                continue;
+            for(int px=0;px<NORMWIDTH;px++){
+                    int x=(int)(round((NORMWIDTH-px-1)*r.xLeft/(NORMWIDTH-1)+px*r.xRight/(NORMWIDTH-1)));
+                    int y=(int)(round((NORMHEIGHT-py-1)*(r.yTop*2+r.yBottom)/3/(NORMHEIGHT-1)+py*r.yBottom/(NORMHEIGHT-1)));
+                    if(x<0||y<0||x>=width||y>=height){
+                            idx++;
+                            continue;
+                    }
+                    normImage[idx].y=getY(img,x,y);
+                    idx++;
             }
-            normImage[idx].y=getY(img,x,y);
-            idx++;
-        }
     }
-    return;
 }
+
 /***
  * fills vector a with value val
  * @param: a: vector, max: length of vector, val: int value to fill in vector
  */
-
 void RobotClassifier::fill(int * a, int val, int max) {
     for (int j = 0; j < max; j++) {
         a[j] = val;
@@ -372,11 +362,10 @@ void RobotClassifier::norm(float *m,int numFeatures) {
 }
 
 
-bool RobotClassifier::isRobot(classifierResult result) {
-    Rect r = result.rect;
+float RobotClassifier::isRobot(RobotClassifierResult result, const RobotRect& r) {
     float cwidth = r.xRight - r.xLeft;
     float cheight = r.yBottom - r.yTop;
-    vec2df features=createVec2df(10,1);
+    vec2df features=createVec2df(14,1);
     features[0][0]=result.features.entropy_Y;
     features[1][0]=result.features.entropy_Y_signed;
     features[2][0]=(result.features.entropy_X_signed - result.features.entropy_Y_signed);
@@ -387,8 +376,12 @@ bool RobotClassifier::isRobot(classifierResult result) {
     features[7][0]=cwidth;
     features[8][0]=cheight;
     features[9][0]=cwidth * cheight;
+    features[10][0]=r.detectionProbability;
+    features[11][0]=r.greenCenterRatio;
+    features[12][0]=r.greenSideRatio;
+    features[13][0]=r.greenBottomRatio;
     float p=robotClassifierNN->proceed(features)[0][0];
-    return p>0.5f;
+    return p;
 }
 
 }  // namespace htwk

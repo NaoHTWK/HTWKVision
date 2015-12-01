@@ -39,19 +39,15 @@ const int BallDetector::maxCy=128;
 const int BallDetector::vecCr=40;
 const int BallDetector::vecCb=-40;
 
-BallDetector::BallDetector(int width, int height, int *lutCb, int *lutCr) :
+BallDetector::BallDetector(int width, int height, int8_t *lutCb, int8_t *lutCr) :
+    BaseDetector(width, height, lutCb, lutCr),
     ballX(0),
     ballY(0),
     ballRadius(0),
     ballRating(0.0),
     found(false)
 {
-    this->lutCb=lutCb;
-    this->lutCr=lutCr;
-    this->width=width;
-    this->height=height;
-
-    ballClassifier=new Classifier("../data/net_1to2F+Mirror+Artefact_IRAN_do0.5_hidden16_bs45000_bi64_iter1000_l2.0E-5.net");
+    ballClassifier=new Classifier("./data/net_1+3F_GOALL2015_do0.5_hidden16_bs45000_bi64_iter1000_l2.0E-5.net");
     ball.cb = 180;
     ball.cr = 100;
     ball.cy = 180;
@@ -109,7 +105,7 @@ void BallDetector::proceed(uint8_t *img, const int * const fieldborder, color gr
             dBFb/=lenBF*max(float(minLenBF),lenBF*0.5f);
             dBFr/=lenBF*max(float(minLenBF),lenBF*0.5f);
         }
-        float dBF=(green.cb+ball.cb)*0.5*dBFr-(green.cr+ball.cr)*0.5*dBFb;
+        float dBF=(green.cb+ball.cb)*0.5f*dBFr-(green.cr+ball.cr)*0.5f*dBFb;
 
         float dBWb=white.cr-ball.cr;
         float dBWr=ball.cb-white.cb;
@@ -189,7 +185,7 @@ float BallDetector::guessDiameter(point_2d points[NUM_STAR_SCANLINES]){
         int dist=dx*dx+dy*dy;
         sum+=dist;
     }
-    return sqrt(sum>>3);
+    return sqrtf(sum>>3);
 }
 
 circle BallDetector::ransacCircle(point_2d points[NUM_STAR_SCANLINE_CANDIDATES], float maxDistEdge){
@@ -210,7 +206,7 @@ circle BallDetector::ransacCircle(point_2d points[NUM_STAR_SCANLINE_CANDIDATES],
         for(int j=0;j<NUM_STAR_SCANLINE_CANDIDATES;j++){
             float distx=(c.x-points[j].x);
             float disty=(c.y-points[j].y);
-            float r=sqrt(distx*distx+disty*disty);
+            float r=sqrtf(distx*distx+disty*disty);
             float distR=fabsf(r-c.r);
             if(distR<maxDistEdge)sum++;
         }

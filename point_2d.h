@@ -10,6 +10,10 @@ struct point_2d {
     float x;
     float y;
 
+    point_2d() = default;
+    point_2d(const point_2d&) = default;
+    constexpr point_2d(float _x, float _y) : x(_x), y(_y) {}
+
     bool operator==(const point_2d& o) const {
         return fabs(x - o.x) < FLT_EPSILON && fabs(y - o.y) < FLT_EPSILON;
     }
@@ -21,10 +25,7 @@ struct point_2d {
 
 inline point_2d newPoint2D(float x = 0, float y = 0)
 {
-    struct point_2d temp;
-    temp.x = x;
-    temp.y = y;
-    return temp;
+    return point_2d(x, y);
 }
 
 }  // namespace htwk

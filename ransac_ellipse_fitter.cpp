@@ -170,20 +170,20 @@ void RansacEllipseFitter::eigenvectors(float a, float b, float eva[2],float eve[
     //ev1
     eve[0][0]=b/(2*(eva[0]-a));
     eve[1][0]=1;
-    l = sqrt(eve[0][0]*eve[0][0]+1);
+	l = sqrtf(eve[0][0]*eve[0][0]+1);
     eve[0][0]/=l;
     eve[1][0]/=l;
     //ev2
     eve[0][1]=b/(2*(eva[1]-a));
     eve[1][1]=1;
-    l = sqrt(eve[0][1]*eve[0][1]+1);
+	l = sqrtf(eve[0][1]*eve[0][1]+1);
     eve[0][1]/=l;
     eve[1][1]/=l;
 }
 
 void RansacEllipseFitter::eigenvalues(float a, float b, float c,float erg[2]){
 
-    float w = sqrt(a*a + b*b + c*c - 2*a*c);
+	float w = sqrtf(a*a + b*b + c*c - 2*a*c);
     float p = a+c;
     erg[0]=(p + w) / 2;
     erg[1]=(p - w) / 2;
@@ -217,13 +217,13 @@ int RansacEllipseFitter::transformEl(Ellipse &el){
     el.f1=el.f-(  ((el.d1*el.d1)/(4*(el.a1)))  + (el.e1*el.e1)/(4*(el.c1))  );
     if(-el.f1/el.a1<0||-el.f1/el.c1<0)
         return -1;
-    el.ta=sqrt(-el.f1/el.a1);
-    el.tb=sqrt(-el.f1/el.c1);
+	el.ta=sqrtf(-el.f1/el.a1);
+	el.tb=sqrtf(-el.f1/el.c1);
 
     if(numeric_limits<float>::infinity() == el.ta || el.tb == numeric_limits<float>::infinity())
         return -1;
 
-    el.brennpunkt=sqrt(fabsf(- el.ta*el.ta + el.tb*el.tb));
+	el.brennpunkt=sqrtf(fabsf(- el.ta*el.ta + el.tb*el.tb));
     return 0;
 }
 

@@ -5,6 +5,7 @@
 #include <stdint.h>
 #include <vector>
 
+#include <base_detector.h>
 #include <color.h>
 #include <linecross.h>
 #include <lineedge.h>
@@ -15,29 +16,8 @@
 
 namespace htwk {
 
-class LineDetector{
+class LineDetector : protected BaseDetector {
 private:
-
-    int width;
-    int height;
-	int *lutCb;
-	int *lutCr;
-
-    inline uint8_t getY(uint8_t *img,int32_t x,int32_t y) const __attribute__((nonnull)) __attribute__((pure)){
-		CHECK_RANGE(x,0,width-1);
-		CHECK_RANGE(y,0,height-1);
-		return img[(x+y*width)<<1];
-	}
-	inline uint8_t getCb(uint8_t *img,int32_t x,int32_t y) const __attribute__((nonnull)) __attribute__((pure)){
-		CHECK_RANGE(x,0,width-1);
-		CHECK_RANGE(y,0,height-1);
-		return img[((x+y*width)<<1)+lutCb[x]];
-	}
-	inline uint8_t getCr(uint8_t *img,int32_t x,int32_t y) const __attribute__((nonnull)) __attribute__((pure)){
-		CHECK_RANGE(x,0,width-1);
-		CHECK_RANGE(y,0,height-1);
-		return img[((x+y*width)<<1)+lutCr[x]];
-	}
 
 public:
 	static const size_t minSegmentCnt;
@@ -48,14 +28,8 @@ public:
     std::vector<LineCross> crossings;
 	color white;
 
-    LineDetector(int width, int height, int *lutCb, int *lutCr) __attribute__((nonnull));
+    LineDetector(int width, int height, int8_t *lutCb, int8_t *lutCr) __attribute__((nonnull));
 	~LineDetector();
-
-    inline void setY(uint8_t* const img, const int32_t x,int32_t y, const uint8_t c) __attribute__((nonnull)){
-        CHECK_RANGE(x,0,width-1);
-        CHECK_RANGE(y,0,height-1);
-        img[(x+y*width)<<1]=c;
-    }
 
     static bool isStraight(LineEdge *line) __attribute__((nonnull));
 	static float getError(LineSegment *le1, LineSegment *le2) __attribute__((nonnull));
@@ -67,7 +41,7 @@ public:
     void updateWhiteColor(std::vector<LineSegment*> lineSegments, uint8_t *img) __attribute__((nonnull));
 	void findLineGroups();
     std::vector<LineGroup> &getLineGroups();
-	color getColor() const { return white; };
+    color getColor() const { return white; }
 };
 
 }  // namespace htwk

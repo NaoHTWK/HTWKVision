@@ -5,9 +5,11 @@
 
 #include <vector>
 
+#include <base_detector.h>
 #include <classifier.h>
-#include <range_check.h>
 #include <rect.h>
+#include <robotrect.h>
+#include <team_membership.h>
 
 #define HISTOGRAMM_SHIFT 2
 #define NORMWIDTH 17
@@ -17,15 +19,9 @@
 
 namespace htwk {
 
-enum class TeamMembership {
-    NONE,
-    BLUE,
-    RED
-};
-
-struct classifierResult{
+struct RobotClassifierResult{
     Rect rect;
-    bool isRobot;
+    float detectionProbability;
     struct {
         float entropy_Y;
         float entropy_Y_signed;
@@ -36,10 +32,12 @@ struct classifierResult{
         float entropy_linesum_X_signed;
         float entropy_linesum_Y_signed;
     } features;
+    float isBlueJersey;
     TeamMembership teamColor;
 };
 
-class RobotClassifier {
+class RobotClassifier : protected BaseDetector
+{
 private:
     struct ycbcr32_t{
         int32_t y;
@@ -47,29 +45,8 @@ private:
         int32_t cr;
     };
     Classifier *robotClassifierNN;
-    int width;
-    int height;
-    int *lutCb;
-    int *lutCr;
     int histolength;
-    inline uint8_t getY(const uint8_t * const img, int32_t x, int32_t y) const
-    __attribute__((nonnull)) __attribute__((pure)) {
-        CHECK_RANGE(x,0,width-1);
-        CHECK_RANGE(y,0,height-1);
-        return img[(x + y * width) << 1];
-    }
-    inline uint8_t getCb(const uint8_t * const img, int32_t x, int32_t y) const
-    __attribute__((nonnull)) __attribute__((pure)) {
-        CHECK_RANGE(x,0,width-1);
-        CHECK_RANGE(y,0,height-1);
-        return img[((x + y * width) << 1) + lutCb[x]];
-    }
-    inline uint8_t getCr(const uint8_t * const img, int32_t x, int32_t y) const
-    __attribute__((nonnull)) __attribute__((pure)) {
-        CHECK_RANGE(x,0,width-1);
-        CHECK_RANGE(y,0,height-1);
-        return img[((x + y * width) << 1) + lutCr[x]];
-    }
+
     static void fill(int * a, int i, int max);
     static float getGradientEntropy_Y_Direction(float* hist, int histlength);
     static float getColorEntropy(float** hist, int length);
@@ -80,8 +57,7 @@ private:
     static void norm(float *m,int numFeatures);
     static float calcMeanDeviation(const ycbcr32_t * const img);
 
-    void generateNormImage(const uint8_t * const img, Rect r,
-            ycbcr32_t * const normImage) const __attribute__((nonnull));
+    void generateNormImage(const uint8_t * const img, RobotRect &r, ycbcr32_t * const normImage) const __attribute__((nonnull));
     float* getGradientHistogramm_Y_Direction(const ycbcr32_t *normImage);
     float* normHistogram(int* histo, int cnt, int histolength);
     float** getColorHistograms(const ycbcr32_t *normImage);
@@ -98,17 +74,10 @@ private:
     TeamMembership determineTeamColor(const uint8_t * const img,Rect r) const;
 
 public:
-    inline void setY(uint8_t * const img, int32_t x, int32_t y, uint8_t c) const
-    __attribute__((nonnull)) {
-        CHECK_RANGE(x,0,width-1);
-        CHECK_RANGE(y,0,height-1);
-        img[(x + y * width) << 1] = c;
-    }
-
-    RobotClassifier(int width, int height, int *lutCb, int *lutCr) __attribute__((nonnull));
-    ~RobotClassifier();
-    void proceed(const uint8_t * const img, Rect r, classifierResult &result) __attribute__((nonnull));
-    bool isRobot(classifierResult result);
+    RobotClassifier(int width, int height, int8_t *lutCb, int8_t *lutCr) __attribute__((nonnull));
+    ~RobotClassifier() {}
+    void proceed(const uint8_t * const img, RobotRect& r, RobotClassifierResult &result) __attribute__((nonnull));
+    float isRobot(RobotClassifierResult result, const RobotRect &r);
 };
 
 }  // namespace htwk

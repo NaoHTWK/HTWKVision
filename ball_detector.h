@@ -3,6 +3,7 @@
 
 #include <cstdint>
 
+#include <base_detector.h>
 #include <classifier.h>
 #include <color.h>
 #include <point_2d.h>
@@ -19,7 +20,7 @@ struct Ball{
     bool found;
 };
 
-class BallDetector{
+class BallDetector : protected BaseDetector {
 
     static const int NUM_STAR_SCANLINES = 16;
     static const int NUM_STAR_SCANLINE_CANDIDATES = 2*NUM_STAR_SCANLINES;
@@ -50,26 +51,7 @@ private:
     static const int vecCr;
     static const int vecCb;
 
-    int width, height;
-    int *lutCb;
-    int *lutCr;
     Classifier* ballClassifier;
-
-    inline uint8_t getY(uint8_t *img,int32_t x,int32_t y) __attribute__((nonnull)) __attribute__((pure)){
-        CHECK_RANGE(x,0,width-1);
-        CHECK_RANGE(y,0,height-1);
-        return img[(x+y*width)<<1];
-    }
-    inline uint8_t getCb(uint8_t *img,int32_t x,int32_t y) __attribute__((nonnull)) __attribute__((pure)){
-        CHECK_RANGE(x,0,width-1);
-        CHECK_RANGE(y,0,height-1);
-        return img[((x+y*width)<<1)+lutCb[x]];
-    }
-    inline uint8_t getCr(uint8_t *img,int32_t x,int32_t y) __attribute__((nonnull)) __attribute__((pure)){
-        CHECK_RANGE(x,0,width-1);
-        CHECK_RANGE(y,0,height-1);
-        return img[((x+y*width)<<1)+lutCr[x]];
-    }
 
     static circle ransacCircle(point_2d points[NUM_STAR_SCANLINES], float maxDistEdge);
     static float guessDiameter(point_2d points[NUM_STAR_SCANLINES]);
@@ -84,26 +66,17 @@ private:
 
 public:
 
-    BallDetector(int width, int height, int *lutCb, int *lutCr) __attribute__((nonnull));
-
-
-    inline void setY(uint8_t* const img, const int32_t x,int32_t y, const uint8_t c) __attribute__((nonnull)){
-        CHECK_RANGE(x,0,width-1);
-        CHECK_RANGE(y,0,height-1);
-        img[(x+y*width)<<1]=c;
-    }
+    BallDetector(int width, int height, int8_t *lutCb, int8_t *lutCr) __attribute__((nonnull));
 
     void proceed(uint8_t *img, const int * const fieldborder, color green, color white, color goal) __attribute__((nonnull));
-    int getBallX() const { return ballX; };
-    int getBallY() const { return ballY; };
-//	int getBallRadius(float alpha,float y);
+    int getBallX() const { return ballX; }
+    int getBallY() const { return ballY; }
     int getBallRadius() const;
-    float getBallRating() const { return ballRating; };
-    bool isBallFound() const { return found; };
+    float getBallRating() const { return ballRating; }
+    bool isBallFound() const { return found; }
     bool isBall(int x, int y) const ;
     Ball getBall();
-    color getColor() const { return ball; };
-
+    color getColor() const { return ball; }
 };
 
 }  // namespace htwk

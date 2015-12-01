@@ -22,10 +22,10 @@ void Classifier::extractWeights(vec2df &arr, FILE *fp, int sizeX, int sizeY){
 vec2df Classifier::proceed(const vec2df &pixels){
     vec2df a2=mmul(W1,(pixels-normMid)/normVar);
     a2=a2+b1;
-    tanh(a2);
+    this->tanh(a2);
     vec2df a3=mmul(W2,a2);
     a3=a3+b2;
-    tanh(a3);
+    this->tanh(a3);
     return a3;
 }
 
@@ -57,6 +57,10 @@ vec2df Classifier::mmul(const vec2df &a, const vec2df &b){
 
 Classifier::Classifier(string weightFile){
     FILE *fp=fopen(weightFile.c_str(),"r");
+    if (fp == NULL) {
+        printf("Could not find %s.\n", weightFile.c_str());
+        exit(-1);
+    }
     int ret=fscanf(fp,"%d;%d;%d;%d;",&version,&inputPixels,&hiddenSize,&outputSize);
     if(ret!=4){
         printf("reading of robot angle estimation file failed!\n");

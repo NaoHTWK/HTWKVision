@@ -95,7 +95,7 @@ bool fit(vector<point_2d> points,float *result) {
             return false;
 
         for (int i=1;i<=6;i++)
-            invL[j][i] /=  sqrt(mod);
+            invL[j][i] /=  sqrtf(mod);
       }
 
     float zero = 10e-20;
@@ -136,7 +136,7 @@ int choldc(float a[][7], int n, float l[][7]) {
                     free(p);
                     return -1;
                 } else
-                    p[i] = sqrt(sum);
+                    p[i] = sqrtf(sum);
             } else {
                 if(p[i] == 0) {
                     free(p);
