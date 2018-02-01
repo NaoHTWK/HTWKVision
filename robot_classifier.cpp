@@ -1,10 +1,7 @@
-#include <robot_classifier.h>
+#include "robot_classifier.h"
 
-#include <cstdio>
-#include <cstdlib>
 #include <cstring>
-
-#include <ext_math.h>
+#include <cmath>
 
 using namespace ext_math;
 using namespace std;

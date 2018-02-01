@@ -5,10 +5,11 @@
 #include <cstdint>
 #include <vector>
 
-#include <base_detector.h>
-#include <field_color_detector.h>
-#include <point_2d.h>
-#include <color.h>
+#include "base_detector.h"
+#include "field_color_detector.h"
+#include "point_2d.h"
+#include "color.h"
+#include "exponential_moving_average.h"
 
 namespace htwk {
 
@@ -19,23 +20,23 @@ private:
     int *footPattern;
     int patternWidth;
     int patternHeight;
-    double minRating;
+    float minRating;
     int feetX;
     int feetY;
     bool found;
-    float avgX;
-    float avgY;
+    EMA avgX;
+    EMA avgY;
     bool avgAvailable;
 
-    double *feetRating;
+    float *feetRating;
 
     int *feetBorderRaw;
     float *feetRatingRaw;
 
     /*This class souldn't be copied */
-    FeetDetector();
-    FeetDetector(FeetDetector& h);
-    void operator=(FeetDetector const&);
+    FeetDetector() = delete;
+    FeetDetector(FeetDetector& h) = delete;
+    void operator=(FeetDetector const&) = delete;
 
     void createFootPattern();
 

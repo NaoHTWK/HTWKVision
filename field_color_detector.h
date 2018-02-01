@@ -1,13 +1,13 @@
 #ifndef __FIELD_COLOR_DETECTOR_H__
 #define __FIELD_COLOR_DETECTOR_H__
 
-#include <stdint.h>
+#include <cstdint>
 
 #include <vector>
 
-#include <base_detector.h>
-#include <color.h>
-#include <range_check.h>
+#include "base_detector.h"
+#include "color.h"
+#include "range_check.h"
 
 #define HIST_SIZE 25
 #define NUM_FEATURES 7
@@ -50,13 +50,13 @@ public:
     int minCr;
     int maxCr;
 
-    FieldColorDetector(int width, int height, int8_t *lutCb, int8_t *lutCr) __attribute__((nonnull));
+    FieldColorDetector(int _width, int _height, int8_t *_lutCb, int8_t *_lutCr) __attribute__((nonnull));
 	~FieldColorDetector();
 
 	void proceed(const uint8_t * const img) __attribute__((nonnull));
 	void searchInitialSeed(const uint8_t * const img);
 	void setYCbCrCube(float* features);
-	void extractFeatures(const uint8_t * const img, float* hist);
+	void extractFeatures(const uint8_t * const img, float* features);
 	static int getStableMin(const int* const hist, int thres);
 	static int getPeak(const int* const hist);
 

@@ -1,14 +1,15 @@
 #ifndef __GOALPOST_H__
 #define __GOALPOST_H__
 
-#include <color.h>
-#include <point_2d.h>
 #include <vector>
+
+#include "color.h"
+#include "point_2d.h"
 
 namespace htwk {
 
 struct GoalPost {
-    GoalPost(int x, int y) : basePoint(x, y) {}
+    GoalPost(float x, float y) : basePoint(x, y) {}
     GoalPost(point_2d bPoint) : basePoint(bPoint) {}
     point_2d basePoint;
     point_2d upperPoint;

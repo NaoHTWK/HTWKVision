@@ -11,25 +11,25 @@ template <typename T> T clamp(T min_val, T val, T max_val) {
 }
 
 template <typename T> int sgn(T val) {
-   return (val > T(0)) - (val < T(0));
+    return (val > T(0)) - (val < T(0));
 }
 
 union floatint{
-        float f;
-        int i;
+    float f;
+    int i;
 };
 
 inline float invSqrt(float x){
-        floatint fi;
-        fi.f=x;
-        float xhalf = 0.5f*fi.f;
-        fi.i = 0x5f375a86-(fi.i>>1); // gives initial guess y0
-        fi.f = fi.f*(1.5f-xhalf*fi.f*fi.f); // Newton step, repeating increases accuracy
-        return fi.f;
+    floatint fi;
+    fi.f=x;
+    float xhalf = 0.5f*fi.f;
+    fi.i = 0x5f375a86-(fi.i>>1); // gives initial guess y0
+    fi.f = fi.f*(1.5f-xhalf*fi.f*fi.f); // Newton step, repeating increases accuracy
+    return fi.f;
 }
 
 template <typename T> T medianOfThree(T a, T b, T c){
-   return a > b ? a < c ? a : b < c ? c : b : b < c ? b : a < c ? c : a;
+    return a > b ? a < c ? a : b < c ? c : b : b < c ? b : a < c ? c : a;
 }
 
 template <typename T> T medianOfFive(T a, T b, T c, T d, T e)
@@ -69,7 +69,7 @@ template <typename T> T medianOfFive(T a, T b, T c, T d, T e)
 }
 
 
-typedef std::vector<std::vector<float> > vec2df;
+using vec2df = std::vector<std::vector<float> >;
 
 static inline vec2df operator+(const vec2df &v1,const vec2df &v2){
     vec2df ret(v1.size());
@@ -123,23 +123,23 @@ static inline vec2df createVec2df(int r,int c){
 }
 
 template <typename T> int fm(T arr[], int b, int n) {
- int f = b;
- int c;
- for(c = b + 1; c < n; c++)
-  if(arr[c] < arr[f])
-   f = c;
- return f;
+    int f = b;
+    int c;
+    for(c = b + 1; c < n; c++)
+        if(arr[c] < arr[f])
+            f = c;
+    return f;
 }
 
 template <typename T> void isort(T arr[], int n) {
- int s, w;
- T sm;
- for(s = 0; s < n - 1; s++) {
-  w = fm(arr, s, n);
-  sm = arr[w];
-  arr[w] = arr[s];
-  arr[s] = sm;
- }
+    int s, w;
+    T sm;
+    for(s = 0; s < n - 1; s++) {
+        w = fm(arr, s, n);
+        sm = arr[w];
+        arr[w] = arr[s];
+        arr[s] = sm;
+    }
 }
 
 }  // namespace ext_math

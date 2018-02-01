@@ -1,6 +1,5 @@
 #include "jersey_color_detector.h"
 
-#include <cmath>
 #include <cstring>
 
 #include "ext_math.h"

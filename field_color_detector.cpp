@@ -1,11 +1,10 @@
-#include <field_color_detector.h>
+#include "field_color_detector.h"
 
 #include <cstdlib>
 #include <cstring>
+#include <cmath>
 
-#include <deque>
-
-#include <ext_math.h>
+#include "ext_math.h"
 
 using namespace ext_math;
 using namespace std;
@@ -64,20 +63,24 @@ void FieldColorDetector::setYCbCrCube(float* features){
 	float minCb=8+15*thetas[idx++];
 	float minCr=8+15*thetas[idx++];
 	for(int j=1;j<=NUM_FEATURES;j++){
-		float feature=pow(features[j-1],1.3+thetas[idx++]);
+        float feature=pow(features[j-1],1.3f+thetas[idx++]);
 		minCy+=100*thetas[idx++]*feature;
 		minCb+=30*thetas[idx++]*feature;
 		minCr+=30*thetas[idx++]*feature;
 	}
+	float gY=3;
+	float gC=2;
 	if(minCy<1)minCy=1;
 	if(minCy>80)minCy=80;
 	if(minCb<1)minCb=1;
 	if(minCb>30)minCb=30;
 	if(minCr<1)minCr=1;
 	if(minCr>30)minCr=30;
-	this->minCy=(int)(greenCy-minCy);
-	this->minCb=(int)(greenCb-minCb);
-	this->minCr=(int)(greenCr-minCr);
+    float gy=1.5;
+    float gc=1.5;
+    this->minCy=(int)(greenCy-minCy*gy);
+    this->minCb=(int)(greenCb-minCb*gc);
+    this->minCr=(int)(greenCr-minCr*gc);
 	this->minCy2=(int)(greenCy-minCy*greenGain);
 	this->minCb2=(int)(greenCb-minCb*greenGain);
 	this->minCr2=(int)(greenCr-minCr*greenGain);
@@ -86,7 +89,7 @@ void FieldColorDetector::setYCbCrCube(float* features){
 	float maxCb=8+15*thetas[idx++];
 	float maxCr=8+15*thetas[idx++];
 	for(int j=1;j<=NUM_FEATURES;j++){
-		float feature=pow(features[j-1],1.3+thetas[idx++]);
+        float feature=pow(features[j-1],1.3f+thetas[idx++]);
 		maxCy+=100*thetas[idx++]*feature;
 		maxCb+=30*thetas[idx++]*feature;
 		maxCr+=30*thetas[idx++]*feature;
@@ -97,9 +100,9 @@ void FieldColorDetector::setYCbCrCube(float* features){
 	if(maxCb>30)maxCb=30;
 	if(maxCr<1)maxCr=1;
 	if(maxCr>30)maxCr=30;
-	this->maxCy=(int)(greenCy+maxCy);
-	this->maxCb=(int)(greenCb+maxCb);
-	this->maxCr=(int)(greenCr+maxCr);
+    this->maxCy=(int)(greenCy+maxCy*gy);
+    this->maxCb=(int)(greenCb+maxCb*gc);
+    this->maxCr=(int)(greenCr+maxCr*gc);
 	this->maxCy2=(int)(greenCy+maxCy*greenGain);
 	this->maxCb2=(int)(greenCb+maxCb*greenGain);
 	this->maxCr2=(int)(greenCr+maxCr*greenGain);

@@ -1,16 +1,16 @@
-#include <line_detector.h>
+#include "line_detector.h"
 
 #include <algorithm>
 #include <cstring>
 
-#include <ext_math.h>
+#include "ext_math.h"
 
 using namespace std;
 
 namespace htwk {
 
 const size_t LineDetector::minSegmentCnt=3;
-const double LineDetector::maxError=0.7;
+const float LineDetector::maxError=0.7;
 
 LineDetector::LineDetector(int width, int height, int8_t *lutCb, int8_t *lutCr)
     : BaseDetector(width, height, lutCb, lutCr)
@@ -39,7 +39,7 @@ vector<LineGroup> &LineDetector::getLineGroups(){
  * scans image for lines (straight groups of line segments from the RegionClassifier)
  */
 void LineDetector::proceed(uint8_t *img, vector<LineSegment*> lineSegments, int q){
-    if(linesTmp.size()>0){
+    if(!linesTmp.empty()){
         for(LineEdge *ls:linesTmp){
             delete(ls);
         }
@@ -49,12 +49,12 @@ void LineDetector::proceed(uint8_t *img, vector<LineSegment*> lineSegments, int 
     //sort and link lineEdges for faster neighbor-search
     sort (lineSegments.begin(), lineSegments.end(),compareLineSegments);
     for(LineSegment *ls:lineSegments){
-        ls->pred=0;
+        ls->pred=nullptr;
     }
-    LineSegment *pred=0;
+    LineSegment *pred=nullptr;
     for(LineSegment *ls:lineSegments){
         ls->minError=numeric_limits<float>::infinity();
-        if(pred!=0){
+        if(pred!=nullptr){
             ls->pred=pred;
         }
         pred=ls;
@@ -66,7 +66,7 @@ void LineDetector::proceed(uint8_t *img, vector<LineSegment*> lineSegments, int 
     for(LineSegment *ls:lineSegments){
         LineSegment *neighbor=ls->pred;
         int minX=ls->x-rMax;
-        while(neighbor!=0&&neighbor->x>=minX){
+        while(neighbor!=nullptr&&neighbor->x>=minX){
             int diffY=neighbor->y-ls->y;
             if(diffY>-rMax&&diffY<rMax){
                 int diffX=neighbor->x-ls->x;
@@ -91,11 +91,11 @@ void LineDetector::proceed(uint8_t *img, vector<LineSegment*> lineSegments, int 
 
     //search for near line-edges with similar angle and group/link them together into individual neighborhood lists for every line-edge
     rMax=(int)(q*8);
-    rMin=(int)(q*0.9);
+    rMin=(int)(q*0.9f);
     for(LineSegment *ls:lineSegments){
         LineSegment *neighbor=ls->pred;
         int minX=ls->x-rMax;
-        while(neighbor!=0&&neighbor->x>=minX){
+        while(neighbor!=nullptr&&neighbor->x>=minX){
             int diffY=neighbor->y-ls->y;
             if(diffY>-rMax&&diffY<rMax){
                 int diffX=neighbor->x-ls->x;
@@ -124,7 +124,7 @@ void LineDetector::proceed(uint8_t *img, vector<LineSegment*> lineSegments, int 
             float dx=ls->x-n->x;
             float dy=ls->y-n->y;
             float angle=atan2(dy,dx);
-            int angleIdx=(int)(35.99*(angle+M_PI)/(M_PI*2));
+            int angleIdx=(int)(35.99f*(angle+M_PI)/(M_PI*2));
             angles[angleIdx]++;
         }
         int maxCnt=0;
@@ -267,7 +267,7 @@ void LineDetector::proceed(uint8_t *img, vector<LineSegment*> lineSegments, int 
                 if(fabsf(side2)<maxDist){
                     float corr1=ls->vx*lsA.nx+ls->vy*lsA.ny;
                     float corrOrth1=ls->vy*lsA.nx-ls->vx*lsA.ny;
-                    if(fabsf(corr1)<0.80 ){
+                    if(fabsf(corr1)<0.80f){
                         if(side1>0&&side2<0){
                             if(corrOrth1>0){
                                 left1.push_back(ls);
@@ -400,13 +400,13 @@ point_2d LineDetector::getIntersection(float px1, float py1, float vx1, float vy
 
     float ab=ax*bx_+ay*by_;
     if(ab==0){
-        return newPoint2D(-1000,-1000);//TODO...hm das ist nicht so schön.. wer weißt wie es ohne viel aufwand besser geht? ^^
+        return point_2d(-1000,-1000);//TODO...hm das ist nicht so schön.. wer weißt wie es ohne viel aufwand besser geht? ^^
     }
     float qb_=qx*bx_+qy*by_;
     float pa_=px*ax_+py*ay_;
     float sx=1.f/ab*(qb_*ax-pa_*bx);
     float sy=1.f/ab*(qb_*ay-pa_*by);
-    return newPoint2D(sx,sy);
+    return point_2d(sx,sy);
 }
 
 void LineDetector::updateWhiteColor(vector<LineSegment*> lineSegments, uint8_t *img){
@@ -449,7 +449,7 @@ void LineDetector::findLineGroups(){
             le->id=id;
             id++;
             int maxVal=minConnectionCnt;
-            LineEdge *bestNeighbor=0;
+            LineEdge *bestNeighbor=nullptr;
             for(LineSegment *ls:le->segments){
                 if(!ls->link)continue;
                 LineEdge *neighbor=ls->link->parentLine;
@@ -499,7 +499,7 @@ bool LineDetector::isStraight(LineEdge *line){
     LineEdge leftLine(leftSegments);
     LineEdge rightLine(rightSegments);
     float diff=fabs(leftLine.nx*rightLine.nx+leftLine.ny*rightLine.ny);
-    return diff>0.997;
+    return diff>0.997f;
 }
 
 //how similar two line-edges are
@@ -516,7 +516,7 @@ float LineDetector::getError(LineSegment *le1, LineSegment *le2){
 
 //alternative way to determine how similar two line-edges are
 float LineDetector::getError2(LineSegment *le1, LineSegment *le2){
-    if(le1->bestNeighbor==0||le2->bestNeighbor==0)return numeric_limits<float>::infinity();
+    if(le1->bestNeighbor==nullptr||le2->bestNeighbor==nullptr)return numeric_limits<float>::infinity();
     float diffC=le1->vx*le2->vx+le1->vy*le2->vy;
     if(diffC<0)return numeric_limits<float>::infinity();
     float vy1=le1->x-le1->bestNeighbor->x;

@@ -1,28 +1,14 @@
-#include <near_obstacle_detector.h>
+#include "near_obstacle_detector.h"
 
-#include <cmath>
-
-#include <field_color_detector.h>
+#include "field_color_detector.h"
 
 using namespace std;
 
 namespace htwk {
 
 const int NearObstacleDetector::pixelSpacing=8;	//nur jeden n-ten Pixel in x- und y-Richtung scannen
-const float NearObstacleDetector::smoothing=0.1;
 const float NearObstacleDetector::threshold=0.3;
 const float NearObstacleDetector::gain=5;
-
-NearObstacleDetector::NearObstacleDetector(int _width, int _height, int8_t *_lutCb, int8_t *_lutCr)
-    : BaseDetector(_width, _height, _lutCb, _lutCr)
-{
-    obstacleL=0;
-    obstacleC=0;
-    obstacleR=0;
-}
-
-NearObstacleDetector::~NearObstacleDetector(){
-}
 
 /**
  * detects the yCbCr color of the playing field in the image.
@@ -63,9 +49,9 @@ void NearObstacleDetector::proceed(const uint8_t * const img, FieldColorDetector
         }
     }
 
-    obstacleL=obstacleL*(1-smoothing)+smoothing*float(sumLeft)/cntLeft;
-    obstacleC=obstacleC*(1-smoothing)+smoothing*float(sumCenter)/cntCenter;
-    obstacleR=obstacleR*(1-smoothing)+smoothing*float(sumRight)/cntRight;
+    obstacleL += float(sumLeft)/cntLeft;
+    obstacleC += float(sumCenter)/cntCenter;
+    obstacleR += float(sumRight)/cntRight;
 }
 
 float NearObstacleDetector::getProb(float s){

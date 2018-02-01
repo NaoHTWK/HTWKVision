@@ -1,9 +1,8 @@
-#include <ransac_ellipse_fitter.h>
+#include "ransac_ellipse_fitter.h"
 
 #include <cstring>
 
-#include <ellifit.h>
-#include <ext_math.h>
+#include "ellifit.h"
 
 using namespace std;
 
@@ -19,12 +18,12 @@ RansacEllipseFitter::RansacEllipseFitter() : ellipseFound(false),
 RansacEllipseFitter::~RansacEllipseFitter(){
 }
 
-void RansacEllipseFitter::proceed(vector<LineSegment*> lineEdgeSegments, vector<LineEdge*> &lineEdges){
+void RansacEllipseFitter::proceed(const vector<LineSegment*> &lineEdgeSegments){
     ellipseFound=false;
     vector<LineSegment*> curveSegments;
     vector<LineSegment*> curveSegmentsFiltered;
     for(const LineSegment *ls : lineEdgeSegments){
-        if(ls->parentLine!=0&&!ls->parentLine->straight){
+        if(ls->parentLine!=nullptr&&!ls->parentLine->straight){
             //da nur eine Ellipse in der Mitte der Linie berechnet werden soll,
             //werden hier jeweils zwei zusammengehörige Linienkanten gemittelt
             LineSegment *lsMid=new LineSegment(	(ls->x+ls->link->x)/2,
@@ -52,12 +51,16 @@ void RansacEllipseFitter::proceed(vector<LineSegment*> lineEdgeSegments, vector<
     }
 }
 
-float RansacEllipseFitter::getRating(vector<LineSegment*> carryover, Ellipse e){
+float RansacEllipseFitter::getRating(const vector<LineSegment*> &carryover, const Ellipse& e){
     int histo[angleCnt];
     memset(histo,0,sizeof(int)*angleCnt);
     for(const LineSegment *le : carryover){
-        point_2d point=newPoint2D(le->x, le->y);
+        point_2d point=point_2d(le->x, le->y);
         transformPo(point, e.trans, e.translation);
+
+        if(e.ta == 0 || e.tb == 0)
+            continue;
+
         float px=point.x/e.ta;
         float py=point.y/e.tb;
         float dist=px*px+py*py;
@@ -79,7 +82,9 @@ float RansacEllipseFitter::getRating(vector<LineSegment*> carryover, Ellipse e){
 }
 
 
-float RansacEllipseFitter::ransacFit(vector<LineSegment*> &carryover, vector<LineSegment*> &lineEdgeSegments, float ellipse[6], int iter, unsigned int minMatches){
+float RansacEllipseFitter::ransacFit(const vector<LineSegment*> &carryover,
+                                     const vector<LineSegment*> &lineEdgeSegments, float ellipse[6],
+                                     int iter, unsigned int minMatches){
     if(carryover.size()<minMatches){
         for(int j=0;j<6;j++){
             ellipse[j]=0;
@@ -100,7 +105,7 @@ float RansacEllipseFitter::ransacFit(vector<LineSegment*> &carryover, vector<Lin
         vector<point_2d> tmp;
         for(int j=0;j<6;j++){
             LineSegment *ls=carryover[(int)(dist(rng)*carryover.size())];
-            point_2d p=newPoint2D(ls->x,ls->y);
+            point_2d p=point_2d(ls->x,ls->y);
             tmp.push_back(p);
         }
 
@@ -127,7 +132,7 @@ float RansacEllipseFitter::ransacFit(vector<LineSegment*> &carryover, vector<Lin
     vector<point_2d> bestSet;
     for(const LineSegment *p : lineEdgeSegments){
         float dist=getEllDist(p->x,p->y,bestEll);
-        point_2d p2=newPoint2D(p->x,p->y);
+        point_2d p2=point_2d(p->x,p->y);
         if(fabsf(dist)<radius){
             bestSet.push_back(p2);
         }
@@ -217,19 +222,19 @@ int RansacEllipseFitter::transformEl(Ellipse &el){
     el.f1=el.f-(  ((el.d1*el.d1)/(4*(el.a1)))  + (el.e1*el.e1)/(4*(el.c1))  );
     if(-el.f1/el.a1<0||-el.f1/el.c1<0)
         return -1;
-	el.ta=sqrtf(-el.f1/el.a1);
-	el.tb=sqrtf(-el.f1/el.c1);
+    el.ta=sqrtf(-el.f1/el.a1);
+    el.tb=sqrtf(-el.f1/el.c1);
 
     if(numeric_limits<float>::infinity() == el.ta || el.tb == numeric_limits<float>::infinity())
         return -1;
 
-	el.brennpunkt=sqrtf(fabsf(- el.ta*el.ta + el.tb*el.tb));
+    el.brennpunkt=sqrtf(fabsf(- el.ta*el.ta + el.tb*el.tb));
     return 0;
 }
 
 //gehört mal überarbeitet...
 float RansacEllipseFitter::getEllDist(float px, float py, Ellipse trEl){
-    point_2d point=newPoint2D(px,py);
+    point_2d point=point_2d(px,py);
     transformPo(point, trEl.trans, trEl.translation);
     px=point.x;
     py=point.y;
@@ -246,14 +251,14 @@ float RansacEllipseFitter::getEllDist(float px, float py, Ellipse trEl){
     return abstand;
 }
 
-void RansacEllipseFitter::transformPo(point_2d &p, float trans[][2], float translation[2] ){
+void RansacEllipseFitter::transformPo(point_2d &p, const float trans[][2], const float translation[2] ){
     float temp1=trans[0][0]* p.x + trans[1][0]*p.y;
     float temp2=trans[0][1]* p.x + trans[1][1]*p.y;
     p.x=temp1+translation[0];
     p.y=temp2+translation[1];
 }
 
-void RansacEllipseFitter::transformPoInv(point_2d &p, float trans[][2], float translation[2] ){
+void RansacEllipseFitter::transformPoInv(point_2d &p, const float trans[][2], const float translation[2] ){
     p.x-=translation[0];
     p.y-=translation[1];
     float temp1=trans[1][1]* p.x - trans[1][0]*p.y;

@@ -2,17 +2,17 @@
 #define __LINE_DETECTOR_H__
 
 #include <cstdlib>
-#include <stdint.h>
+#include <cstdint>
 #include <vector>
 
-#include <base_detector.h>
-#include <color.h>
-#include <linecross.h>
-#include <lineedge.h>
-#include <linegroup.h>
-#include <linesegment.h>
-#include <point_2d.h>
-#include <range_check.h>
+#include "base_detector.h"
+#include "color.h"
+#include "linecross.h"
+#include "lineedge.h"
+#include "linegroup.h"
+#include "linesegment.h"
+#include "point_2d.h"
+#include "range_check.h"
 
 namespace htwk {
 
@@ -21,7 +21,7 @@ private:
 
 public:
 	static const size_t minSegmentCnt;
-	static const double maxError;
+    static const float maxError;
     std::vector<LineEdge*> linesTmp;
     std::vector<LineEdge*> lineEdges;
     std::vector<LineGroup> linesList;

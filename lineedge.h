@@ -3,6 +3,8 @@
 
 #include <vector>
 
+#include <point_2d.h>
+
 namespace htwk {
 class LineSegment;
 
@@ -23,8 +25,10 @@ public:
 	LineEdge();
 	~LineEdge();
 	LineEdge(int id);
-	LineEdge(const std::vector<LineSegment*>& segments);
-	void update();
+	LineEdge(std::vector<LineSegment*>  seg);
+    point_2d p1() const { return {px1, py1}; }
+    point_2d p2() const { return {px2, py2}; }
+    void update();
 	void setVector(float vx, float vy);
 	float estimateLineWidth();
 

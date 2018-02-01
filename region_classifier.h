@@ -1,13 +1,13 @@
 #ifndef __REGION_CLASSIFIER_H__
 #define __REGION_CLASSIFIER_H__
 
-#include <stdint.h>
+#include <cstdint>
 #include <vector>
 
-#include <base_detector.h>
-#include <field_color_detector.h>
-#include <linesegment.h>
-#include <point_2d.h>
+#include "base_detector.h"
+#include "field_color_detector.h"
+#include "linesegment.h"
+#include "point_2d.h"
 
 namespace htwk {
 
@@ -30,41 +30,44 @@ struct Scanline{
 class RegionClassifier : protected BaseDetector
 {
 private:
-    RegionClassifier();
-	RegionClassifier(const RegionClassifier & cpy);
-	RegionClassifier operator= (RegionClassifier & cpy);
+    RegionClassifier() = delete;
+	RegionClassifier(const RegionClassifier & cpy) = delete;
+	RegionClassifier operator= (RegionClassifier & cpy) = delete;
+
+    static void classifyGreenRegions(Scanline *sl, FieldColorDetector *field) __attribute__((nonnull));
+    static void classifyWhiteRegions(Scanline *sl) __attribute__((nonnull));
+    bool addEdge(uint8_t *img, Scanline *scanline, int xPeak, int yPeak, int edgeIntensity, bool optimize) const __attribute__((nonnull));
+
+    void scan(uint8_t *img, int xPos, int yPos, FieldColorDetector *field, Scanline *scanline) const __attribute__((nonnull));
+    point_2d getGradientVector(int x, int y, int lineWidth, uint8_t *img) __attribute__((nonnull));
+    void getColorsFromRegions(uint8_t *img, Scanline *sl, int dirX, int dirY) const __attribute__((nonnull));
+    void addSegments(Scanline *scanlines, int scanlineCnt, uint8_t *img)  __attribute__((nonnull));
+
+    Scanline *scanVertical;
+    Scanline *scanHorizontal;
+
+    static int tEdge;
+    static int maxEdgesInLine;
+    static int maxLineBorder;
+    int lineRegionsCnt;
+    static const int matchRadius=2;
+    int pattern[matchRadius*2+1];
 
 public:
-    static const int lineSpacing=16;
-    static const int matchRadius=2;
+    const int lineSpacing;
     static const int searchRadius=2;
     static const int searchLen=8;
 
-	Scanline *scanVertical;
-	Scanline *scanHorizontal;
-
-	static int tEdge;
-	static int maxEdgesInLine;
-	static int maxLineBorder;
-	int lineRegionsCnt;
-    int pattern[matchRadius*2+1];
 	std::vector<LineSegment*> *lineSegments;
 
-    RegionClassifier(int width, int height, int8_t *lutCb, int8_t *lutCr) __attribute__((nonnull));
+    RegionClassifier(int width, int height, bool isUpperCam, int8_t *lutCb, int8_t *lutCr) __attribute__((nonnull));
 	~RegionClassifier();
 
-    static int getLineSpacing() { return lineSpacing; }
+    void proceed(uint8_t *img, FieldColorDetector *field) __attribute__((nonnull));
     int getScanVerticalSize() { return width/lineSpacing; }
-	static void classifyGreenRegions(Scanline *sl, FieldColorDetector *field) __attribute__((nonnull));
-	static void classifyWhiteRegions(Scanline *sl) __attribute__((nonnull));
-	bool addEdge(uint8_t *img, Scanline *scanline, int xPeak, int yPeak, int edgeIntensity, bool optimize) const __attribute__((nonnull));
-
-	void proceed(uint8_t *img, FieldColorDetector *field) __attribute__((nonnull));
-	void scan(uint8_t *img, int xPos, int yPos, FieldColorDetector *field, Scanline *scanline) const __attribute__((nonnull));
-	point_2d getGradientVector(int x, int y, int lineWidth, uint8_t *img) __attribute__((nonnull));
-	void getColorsFromRegions(uint8_t *img, Scanline *sl, int dirX, int dirY) const __attribute__((nonnull));
-	void addSegments(Scanline *scanlines, int scanlineCnt, uint8_t *img)  __attribute__((nonnull));
-	std::vector<LineSegment*> getLineSegments(const int* const fieldborder);
+    int getScanHorizontalSize() { return height/lineSpacing; }
+    std::vector<LineSegment*> getLineSegments(const int* const fieldborder);
+    int getLineSpacing() const { return lineSpacing; }
     Scanline *getScanVertical() const { return scanVertical; }
     Scanline *getScanHorizontal() const { return scanHorizontal; }
 };

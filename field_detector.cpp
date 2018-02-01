@@ -1,8 +1,6 @@
 #include "field_detector.h"
 
-#include <vector>
-
-#include <point_2d.h>
+#include <cstring>
 
 using namespace std;
 
@@ -17,7 +15,9 @@ FieldDetector::FieldDetector(int width, int height, int8_t *lutCb, int8_t *lutCr
     }
 }
 
-FieldDetector::~FieldDetector() {}
+FieldDetector::~FieldDetector() {
+    delete [] fieldBorderFull;
+}
 
 /**
  * decides which pixels belonging to the playing-field by modelling the
@@ -25,7 +25,14 @@ FieldDetector::~FieldDetector() {}
  */
 void FieldDetector::proceed(
         const uint8_t *const img, const FieldColorDetector *const field,
-        const RegionClassifier *const regionClassifier) {
+        const RegionClassifier *const regionClassifier, const bool isUpper) {
+	if(!isUpper){
+        // 0 means a field border on the top of the
+        // image, so that all pixels below are valid
+        // field pixels
+        memset(fieldBorderFull, 0, width*sizeof(*fieldBorderFull));
+		return;
+	}
     // search possible points on the field-border
     //(points on edges, with a green color on the bottom and not a green or white
     //color on the top)
@@ -161,18 +168,20 @@ void FieldDetector::proceed(
                     }
                 }
             }
-            Line best = newLine(0, bestD/bestNy, width-1, (bestD-bestNx*(width-1))/bestNy);
-            if (bestNy2 == 0 ) {
+            Line best;
+            if(bestNy != 0) {
+                best = Line(0, bestD/bestNy, width-1, (bestD-bestNx*(width-1))/bestNy);
+            } else if (bestNy2 == 0 ) {
                 fieldBorderLines.push_back(best);
             } else {
-                Line best2 = newLine(0, bestD2/bestNy2, width-1, (bestD2-bestNx2*(width-1))/bestNy2);
-                Coord intersection = best.getIntersection(best2);
+                Line best2(0, bestD2/bestNy2, width-1, (bestD2-bestNx2*(width-1))/bestNy2);
+                point_2d intersection = best.getIntersection(best2);
                 if (best.py1 > best2.py1) {
-                    fieldBorderLines.push_back(newLine(best.px1, best.py1, intersection.x, intersection.y));
-                    fieldBorderLines.push_back(newLine(intersection.x, intersection.y, best2.px2, best2.py2));
+                    fieldBorderLines.emplace_back(best.px1, best.py1, intersection.x, intersection.y);
+                    fieldBorderLines.emplace_back(intersection.x, intersection.y, best2.px2, best2.py2);
                 } else {
-                    fieldBorderLines.push_back(newLine(best2.px1, best2.py1, intersection.x, intersection.y));
-                    fieldBorderLines.push_back(newLine(intersection.x, intersection.y, best.px2, best.py2));
+                    fieldBorderLines.emplace_back(best2.px1, best2.py1, intersection.x, intersection.y);
+                    fieldBorderLines.emplace_back(intersection.x, intersection.y, best.px2, best.py2);
                 }
             }
             //interpolate the field-border from one or two lines

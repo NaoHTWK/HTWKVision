@@ -4,15 +4,14 @@
 #include <limits>
 #include <vector>
 
-#include <lineedge.h>
+#include "lineedge.h"
 
 namespace htwk {
 class LineSegment {
- private:
-  LineSegment(LineSegment &l);
-  void operator=(LineSegment const &);
+public:
+  LineSegment(LineSegment &l) = delete;
+  void operator=(LineSegment const &) = delete;
 
- public:
   int x, y;
   float vx, vy;
   int id;  // die ID ist bei Segmenten, die zur gleichen Linienkante gehÃ¶ren,
@@ -35,8 +34,8 @@ class LineSegment {
     this->y = y;
     this->vx = vecX;
     this->vy = vecY;
-    this->bestNeighbor = 0;
-    this->parentLine = 0;
+    this->bestNeighbor = nullptr;
+    this->parentLine = nullptr;
     this->id = 0;
     this->link = nullptr;
     pred = nullptr;

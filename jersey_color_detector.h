@@ -1,14 +1,14 @@
 #ifndef __JERSEYCOLORDETECTOR_H__
 #define __JERSEYCOLORDETECTOR_H__
 
-#include <stdint.h>
+#include <cstdint>
 
 #include <vector>
 
-#include <base_detector.h>
-#include <range_check.h>
-#include <robotrect.h>
-#include <team_membership.h>
+#include "base_detector.h"
+#include "range_check.h"
+#include "robotrect.h"
+#include "team_membership.h"
 
 namespace htwk {
 
@@ -39,9 +39,9 @@ private:
     TeamMembership determineTeamColor(const uint8_t * const img, RobotRect r) const;
 
 public:
-    JerseyColorDetector(int width, int height, int8_t *lutCb, int8_t *lutCr) __attribute__((nonnull));
+    JerseyColorDetector(int _width, int _height, int8_t *lutCb, int8_t *lutCr) __attribute__((nonnull));
     ~JerseyColorDetector() {}
-    float isBlueJersey(const uint8_t * const img, RobotRect r) __attribute__((nonnull));
+    float isBlueJersey(const uint8_t * const img, RobotRect rect) __attribute__((nonnull));
 	void setHistogramY(const uint8_t * const img, RobotRect rect, int* hist) __attribute__((nonnull));
 	void setHistogramCb(const uint8_t * const img, RobotRect rect, int* hist) __attribute__((nonnull));
 	void setHistogramCr(const uint8_t * const img, RobotRect rect, int* hist) __attribute__((nonnull));

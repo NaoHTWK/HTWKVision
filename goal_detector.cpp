@@ -1,8 +1,7 @@
-#include <goal_detector.h>
+#include "goal_detector.h"
 
 #include <cstring>
 #include <iostream>
-#include <ext_math.h>
 
 using namespace ext_math;
 using namespace std;
@@ -15,7 +14,7 @@ const int GoalDetector::minGoalHeight=70;
 const int GoalDetector::scanlineCnt=15;
 const int GoalDetector::q=2;
 const int GoalDetector::minGoalPostToBorderDist=4;
-const bool GoalDetector::detectYellowGoals=false;
+const bool GoalDetector::detectDarkGoals=false;
 
 GoalDetector::GoalDetector(int width, int height, int8_t *lutCb, int8_t *lutCr)
     : BaseDetector(width, height, lutCb, lutCr)
@@ -28,55 +27,55 @@ void GoalDetector::proceed(uint8_t *img, const int * const fieldborder, color gr
     goalPosts = std::vector<GoalPost>();
     bestProbability = 0;
 
-    std::vector<int> edgeTable;
-    getEdgeTable(img, fieldborder, scanlineCnt, edgeTable);
-
-    int widthTable = width / q;
-
-    int acc=0;
-    int lastSum=0;
-    int lastX=0;
-    int lastAcc=0;
-    int avgX=0;
-    int avgXCnt=0;
-    int thres=40;
-    int accThres=200;
-    int goalpostAccThres=800;
-    for(int x=1;x<widthTable-1;x++){
-        int sumMax=0;
-        for(int dx=-3;dx<=3;dx++){
-            int sum=0;
-            for(int y=0;y<scanlineCnt;y++){
-                int px=x+dx*(y-scanlineCnt)/6;
-                if(px<0||px>=width)continue;
-                int edge=edgeTable[px+y*widthTable];
-                sum+=edge;
-            }
-            if(abs(sum)>abs(sumMax)){
-                sumMax=sum;
-            }
-        }
-
-        int sum=sumMax;
-        if(abs(sum)>thres&&lastSum*sum>0){
-            acc+=sum;
-            avgX+=2*x*sum;
-            avgXCnt+=sum;
-        }else{
-            if(abs(acc)>accThres){
-                int currX=avgX/avgXCnt;
-                if(lastAcc<0&&acc>0&&acc-lastAcc>goalpostAccThres){
-                    analyseGoalPost(img,lastX,currX,fieldborder,green);
-                }
-                lastAcc=acc;
-                lastX=currX;
-            }
-            acc=0;
-            avgX=0;
-            avgXCnt=0;
-        }
-        lastSum=sum;
-    }
+//    std::vector<int> edgeTable;
+//    getEdgeTable(img, fieldborder, scanlineCnt, edgeTable);
+//
+//    int widthTable = width / q;
+//
+//    int acc=0;
+//    int lastSum=0;
+//    int lastX=0;
+//    int lastAcc=0;
+//    int avgX=0;
+//    int avgXCnt=0;
+//    int thres=40;
+//    int accThres=200;
+//    int goalpostAccThres=800;
+//    for(int x=1;x<widthTable-1;x++){
+//        int sumMax=0;
+//        for(int dx=-3;dx<=3;dx++){
+//            int sum=0;
+//            for(int y=0;y<scanlineCnt;y++){
+//                int px=x+dx*(y-scanlineCnt)/6;
+//                if(px<0||px>=width)continue;
+//                int edge=edgeTable[px+y*widthTable];
+//                sum+=edge;
+//            }
+//            if(abs(sum)>abs(sumMax)){
+//                sumMax=sum;
+//            }
+//        }
+//
+//        int sum=sumMax;
+//        if(abs(sum)>thres&&lastSum*sum>0){
+//            acc+=sum;
+//            avgX+=2*x*sum;
+//            avgXCnt+=sum;
+//        }else{
+//            if(abs(acc)>accThres){
+//                int currX=avgX/avgXCnt;
+//                if(lastAcc<0&&acc>0&&acc-lastAcc>goalpostAccThres){
+//                    analyseGoalPost(img,lastX,currX,fieldborder,green);
+//                }
+//                lastAcc=acc;
+//                lastX=currX;
+//            }
+//            acc=0;
+//            avgX=0;
+//            avgXCnt=0;
+//        }
+//        lastSum=sum;
+//    }
 }
 
 void GoalDetector::analyseGoalPost(uint8_t *img, int xLeft, int xRight, const int * const fieldborder, color green){
@@ -212,7 +211,7 @@ void GoalDetector::analyseGoalPost(uint8_t *img, int xLeft, int xRight, const in
     gp.color=color(whiteY, whiteCb, whiteCr);
     gp.width=goalWidth;
 
-    vec2df feature=createVec2df(15,1);
+    vec2df feature=ext_math::createVec2df(15,1);
     feature[0][0]=gp.width;
     float dx=gp.basePoint.x-gp.upperPoint.x;
     float dy=gp.basePoint.y-gp.upperPoint.y;
@@ -283,17 +282,17 @@ int GoalDetector::searchBase(uint8_t *img, int lowerY, int baseSearchHeight, flo
     return lowerY;
 }
 
-int GoalDetector::findMaxWhite(uint8_t *img, point_2d base, int windowSize,int windowSteps, int searchSteps){
+int GoalDetector::findMaxWhite(uint8_t *img, point_2d &base, int windowSize, int windowSteps, int searchSteps){
     int sumCy=0;
-    int gain=4;
+    //int gain=4;
     for(int j=-windowSteps/2;j<-windowSteps/2+windowSteps;j++){
         int nx=base.x+(j-searchSteps/2)*windowSize/(windowSteps-1);
 
         if(nx<0)nx=0;
         if(nx>=width)nx=width-1;
         int cy=getY(img,nx,base.y);
-        if(detectYellowGoals){
-            cy=128+(128-getCb(img,nx,base.y))*gain;
+        if(detectDarkGoals){
+            cy=128+(128-getY(img,nx,base.y));
         }
         sumCy+=cy;
     }
@@ -308,9 +307,9 @@ int GoalDetector::findMaxWhite(uint8_t *img, point_2d base, int windowSize,int w
         if(nxEnd>=width)nxEnd=width-1;
         int cyStart=getY(img,nxStart,base.y);
         int cyEnd=getY(img,nxEnd,base.y);
-        if(detectYellowGoals){
-            cyStart=128+(128-getCb(img,nxStart,base.y))*gain;
-            cyEnd=128+(128-getCb(img,nxEnd,base.y))*gain;
+        if(detectDarkGoals){
+            cyStart=128+(128-getY(img,nxStart,base.y));
+            cyEnd=128+(128-getY(img,nxEnd,base.y));
         }
         sumCy+=cyEnd-cyStart;
         if(sumCy>maxSumCy){
@@ -334,8 +333,8 @@ void GoalDetector::getEdgeTable(uint8_t *img, const int * const fieldborder, int
         for(int y=0;y<scanlineCnt;y++){
             int py=std::min(height-1,std::max(0,std::max(fieldborder[x],minGoalHeight-minGoalPostToBorderDist*2)-y*minGoalHeight/scanlineCnt+minGoalPostToBorderDist*2));
             int f=getY(img,x-2,py)-getY(img,x+2,py);
-            if(detectYellowGoals){
-                f=f/2+2*(getCb(img,x+2,py)-getCb(img,x-2,py));
+            if(detectDarkGoals){
+                f=f/2+2*(getY(img,x+2,py)-getY(img,x-2,py));
             }
             if(abs(f)>edgeThreshold){
                 hist[x/q+y*widthHist]=f;

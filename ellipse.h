@@ -1,6 +1,8 @@
 #ifndef __ELLIPSE_H__
 #define __ELLIPSE_H__
 
+#include <vector>
+
 namespace htwk {
 
 class Ellipse{
@@ -34,6 +36,17 @@ public:
         e=ellipse[4];
         f=ellipse[5];
 
+        trans[0][0] = 0;
+        trans[0][1] = 0;
+        trans[1][0] = 0;
+        trans[1][1] = 0;
+
+        translation[0] = 0;
+        translation[1] = 0;
+    }
+
+    Ellipse(const std::vector<float> &p) : a(p[0]), b(p[1]), c(p[2]), d(p[3]), e(p[4]), f(p[5]),
+            a1(0),b1(0),c1(0),d1(0),e1(0),f1(0), ta(0),tb(0), brennpunkt(0), found(false) {
         trans[0][0] = 0;
         trans[0][1] = 0;
         trans[1][0] = 0;

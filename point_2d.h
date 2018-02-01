@@ -3,6 +3,8 @@
 
 #include <cfloat>
 #include <cmath>
+#include <tuple>
+#include <fast_math.h>
 
 namespace htwk {
 
@@ -11,22 +13,105 @@ struct point_2d {
     float y;
 
     point_2d() = default;
-    point_2d(const point_2d&) = default;
-    constexpr point_2d(float _x, float _y) : x(_x), y(_y) {}
+    template <typename P>
+    point_2d(const P& p) : x(p.x), y(p.y) {}
+    constexpr point_2d(float x, float y) : x(x), y(y) {}
 
-    bool operator==(const point_2d& o) const {
-        return fabs(x - o.x) < FLT_EPSILON && fabs(y - o.y) < FLT_EPSILON;
+    point_2d& operator+=(const point_2d& rhs) {
+        x += rhs.x;
+        y += rhs.y;
+        return *this;
     }
 
-    inline float magnitude() {
-        return sqrt(x*x+y*y);
+    friend point_2d operator+(point_2d lhs, const point_2d& rhs) {
+        lhs += rhs;
+        return lhs;
+    }
+
+    point_2d& operator-=(const point_2d& rhs) {
+        x -= rhs.x;
+        y -= rhs.y;
+        return *this;
+    }
+
+    friend point_2d operator-(point_2d lhs, const point_2d& rhs) {
+        lhs -= rhs;
+        return lhs;
+    }
+
+    friend point_2d operator*(point_2d lhs, float rhs) {
+        lhs.x *= rhs;
+        lhs.y *= rhs;
+        return lhs;
+    }
+
+    friend point_2d operator*(float lhs, const point_2d& rhs) {
+        return rhs*lhs;
+    }
+
+    point_2d& operator/=(float rhs) {
+        x /= rhs;
+        y /= rhs;
+        return *this;
+    }
+
+    friend point_2d operator/(point_2d lhs, float rhs) {
+        lhs /= rhs;
+        return lhs;
+    }
+
+    constexpr point_2d operator-() const {
+        return point_2d(-x, -y);
+    }
+
+    inline float norm() const {
+        return sqrtf(x*x+y*y);
+    }
+
+    inline float norm_sqr() const {
+        return x*x+y*y;
+    }
+
+    inline point_2d mul_elem(const point_2d& b) const {
+        return {x * b.x, y * b.y};
+    }
+
+    inline float dot(const point_2d& b) const {
+        return x * b.x + y * b.y;
+    }
+
+    inline std::tuple<float,float> tuple() const {
+        return std::make_tuple(x, y);
+    }
+
+    point_2d rotated(float angle) {
+        return {x * cosf(angle) - y * sinf(angle), x * sinf(angle) + y * cosf(angle)};
+    }
+
+    point_2d rotated_approx(float angle) {
+        float c = approx_cos(angle);
+        float s = approx_sin(angle);
+        return {x * c - y * s, x * s + y * c};
+    }
+
+    point_2d normalized() const {
+        float n = norm();
+        if (n == 0) return {0, 0};
+        return {x / n, y / n};
+    }
+
+    point_2d normal() const {
+        return {-y, x};
+    }
+
+    friend bool operator==(const point_2d& lhs, const point_2d& rhs) {
+        return lhs.x == rhs.x && lhs.y == rhs.y;
+    }
+
+    friend bool operator!=(const point_2d& lhs, const point_2d& rhs) {
+        return !(lhs == rhs);
     }
 };
-
-inline point_2d newPoint2D(float x = 0, float y = 0)
-{
-    return point_2d(x, y);
-}
 
 }  // namespace htwk
 

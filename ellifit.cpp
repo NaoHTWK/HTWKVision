@@ -1,8 +1,6 @@
-#include <ellifit.h>
+#include "ellifit.h"
 
 #include <algorithm>
-#include <cstdio>
-#include <limits>
 
 using namespace std;
 
@@ -121,7 +119,7 @@ int choldc(float a[][7], int n, float l[][7]) {
     int i, j, k;
     float sum;
     float *p = (float*)malloc(sizeof(float)*(n + 1));
-    if (p == NULL) {
+    if (p == nullptr) {
         fprintf(stderr, "Error: malloc() returned NULL in file %s line %d. Exiting.\n", __FILE__, __LINE__);
         exit(EXIT_FAILURE);
     }

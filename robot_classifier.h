@@ -5,11 +5,11 @@
 
 #include <vector>
 
-#include <base_detector.h>
-#include <classifier.h>
-#include <rect.h>
-#include <robotrect.h>
-#include <team_membership.h>
+#include "base_detector.h"
+#include "classifier.h"
+#include "rect.h"
+#include "robotrect.h"
+#include "team_membership.h"
 
 #define HISTOGRAMM_SHIFT 2
 #define NORMWIDTH 17
@@ -47,7 +47,7 @@ private:
     Classifier *robotClassifierNN;
     int histolength;
 
-    static void fill(int * a, int i, int max);
+    static void fill(int * a, int val, int max);
     static float getGradientEntropy_Y_Direction(float* hist, int histlength);
     static float getColorEntropy(float** hist, int length);
     static int normSum_Y_Line(int x,const ycbcr32_t *normImage);

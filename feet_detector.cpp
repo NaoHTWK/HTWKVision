@@ -1,10 +1,6 @@
-#include <feet_detector.h>
+#include "feet_detector.h"
 
-#include <cstdio>
-#include <cstdlib>
-#include <cstring>
-
-#include <ext_math.h>
+#include "ext_math.h"
 
 using namespace ext_math;
 using namespace std;
@@ -19,8 +15,8 @@ FeetDetector::FeetDetector(int _width, int _height, int8_t *_lutCb, int8_t *_lut
     feetX(_width/2),
     feetY(_height*15/16),
     found(false),
-    avgX(feetX),
-    avgY(feetY),
+    avgX(feetX, 0.75f),
+    avgY(feetY, 0.75f),
     avgAvailable(true)
 {
     if (width <= 0 || height <= 0) {
@@ -30,12 +26,12 @@ FeetDetector::FeetDetector(int _width, int _height, int8_t *_lutCb, int8_t *_lut
     createFootPattern();
 
     feetBorder=(int*)malloc(sizeof(int)*(width/q));
-    if (feetBorder == NULL) {
+    if (feetBorder == nullptr) {
         fprintf(stderr, "Error: malloc() returned NULL in file %s line %d. Exiting.", __FILE__, __LINE__);
         exit(EXIT_FAILURE);
     }
-    feetRating=(double*)malloc(sizeof(double)*(width));
-    if (feetRating == NULL) {
+    feetRating=(float*)malloc(sizeof(float)*(width));
+    if (feetRating == nullptr) {
         fprintf(stderr, "Error: malloc() returned NULL in file %s line %d. Exiting.", __FILE__, __LINE__);
         exit(EXIT_FAILURE);
     }
@@ -50,7 +46,7 @@ FeetDetector::~FeetDetector(){
 //initializes the array 'footPattern' with an approximation of the shape of the nao foot (can later be compared with shapes in the image)
 inline void FeetDetector::createFootPattern(){
     footPattern=(int*)malloc(sizeof(*footPattern)*(patternWidth));
-    if (footPattern == NULL) {
+    if (footPattern == nullptr) {
         fprintf(stderr, "Error: malloc() returned NULL in file %s line %d. Exiting.", __FILE__, __LINE__);
         exit(EXIT_FAILURE);
     }
@@ -74,7 +70,7 @@ void FeetDetector::proceed(const uint8_t* const img, FieldColorDetector *field, 
     }
 
     int *feetBorderRaw=(int*)calloc(1, sizeof(int)*(width/q));
-    if (feetBorderRaw == NULL) {
+    if (feetBorderRaw == nullptr) {
         fprintf(stderr, "Error: malloc() returned NULL in file %s line %d. Exiting.", __FILE__, __LINE__);
         exit(EXIT_FAILURE);
     }
@@ -106,30 +102,30 @@ void FeetDetector::proceed(const uint8_t* const img, FieldColorDetector *field, 
 
     //some median filtering of the detected contour
     for(int x=1;x<width/q-1;x++){
-        feetBorder[x]=medianOfThree(feetBorderRaw[x-1],feetBorderRaw[x],feetBorderRaw[x+1]);
+        feetBorder[x]=ext_math::medianOfThree(feetBorderRaw[x-1],feetBorderRaw[x],feetBorderRaw[x+1]);
     }
     free(feetBorderRaw);
 
     //calculates a contour rating (determine how good the detected contour matches to the shape of the nao foot)
-    double *feetRatingRaw=(double*)malloc(sizeof(double)*(width));
+    float *feetRatingRaw=(float*)malloc(sizeof(float)*(width));
     for(int i=0;i<width;i++){
         feetRatingRaw[i]=1E10;
     }
     for(int i=patternWidth/2;i<width-patternWidth/2;i++){
-        double sum=0;
+        float sum=0;
         for(int j=-patternWidth/2;j<patternWidth/2;j++){
             int feetY=feetBorder[(i+j)/q]-feetBorder[i/q];
             int patternY=footPattern[j+patternWidth/2];
             sum+=abs(feetY-patternY);
         }
-        feetRatingRaw[i]=((double)sum)/((double)patternWidth)/patternHeight;
+        feetRatingRaw[i]=((float)sum)/((float)patternWidth)/patternHeight;
     }
 
     //blur the contour rating results to suppress noise
     int blur=8;
-    double scale=1./(blur*2+1);
+    float scale=1./(blur*2+1);
     for(int i=0;i<width;i++){
-        double sum=0;
+        float sum=0;
         for(int di=-blur;di<=blur;di++){
             int ni=i+di;
             if(ni<0)ni=0;
@@ -156,7 +152,7 @@ void FeetDetector::proceed(const uint8_t* const img, FieldColorDetector *field, 
             }
         }
         if(isMin){
-            float angle=-(float)(i-width/2)/(width/2)*0.4+headYaw;
+            float angle=-(float)(i-width/2)/(width/2)*0.4f+headYaw;
             int px=(int)(i+sin(angle)*patternHeight);
             int py=(int)(feetBorder[i/q]+patternHeight-patternHeight*cos(angle));
             point_2d p;
@@ -192,8 +188,8 @@ void FeetDetector::proceed(const uint8_t* const img, FieldColorDetector *field, 
     feetY=bestY;
 //    avgY=400;
     if(found){
-        avgX=avgX*.75f+feetX*.25f;
-        avgY=avgY*.75f+feetY*.25f;
+        avgX+=feetX;
+        avgY+=feetY;
 //        printf("feet found: %f, %f\n",avgX,avgY);
     }
 }
@@ -209,10 +205,10 @@ bool FeetDetector::isInterpolated() const {
 //gets the point between the right and left top of the nao feet (between the toes)
 point_2d FeetDetector::getBase() const {
     if(found){
-        point_2d ret=newPoint2D(feetX,feetY);
+        point_2d ret=point_2d(feetX,feetY);
         return ret;
     }else{
-        point_2d ret=newPoint2D(avgX,avgY);
+        point_2d ret=point_2d(avgX,avgY);
         return ret;
     }
 }

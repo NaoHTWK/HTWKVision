@@ -1,173 +1,401 @@
-#include <htwk_vision.h>
+#include "htwk_vision.h"
 
-#include <cstdlib>
-#include <cstdio>
-
-using namespace std::chrono;
+#include "hypotheses_generator_scanlines.h"
 
 namespace htwk {
 
-HTWKVision::HTWKVision(int width, int height): width(width), height(height) {
+HTWKVision::HTWKVision(int width, int height, HtwkVisionConfig  _config)
+    : width(width)
+//    , height(height)
+    , config(std::move(_config))
+{
     createAdressLookups();
     fieldColorDetector=new FieldColorDetector(width, height, lutCb, lutCr);
     fieldDetector=new FieldDetector(width, height, lutCb, lutCr);
-    regionClassifier=new RegionClassifier(width, height, lutCb, lutCr);
+    regionClassifier=new RegionClassifier(width, height, config.isUpperCam, lutCb, lutCr);
     goalDetector=new GoalDetector(width, height, lutCb, lutCr);
     lineDetector=new LineDetector(width, height, lutCb, lutCr);
-    ballDetector=new BallDetector(width, height, lutCb, lutCr);
+    ballFeatureExtractor=new BallFeatureExtractor(width, height, lutCb, lutCr);
     feetDetector=new FeetDetector(width, height, lutCb, lutCr);
     ellipseFitter=new RansacEllipseFitter();
     robotAreaDetector=new RobotAreaDetector(width,height, lutCb, lutCr, regionClassifier->getScanVerticalSize());
     robotClassifier=new RobotClassifier(width, height, lutCb, lutCr);
-    nearObstacleDetector = new NearObstacleDetector(width, height, lutCb, lutCr);
-    jerseyColorDetector = new JerseyColorDetector(width, height, lutCb, lutCr);
+    nearObstacleDetector=new NearObstacleDetector(width, height, lutCb, lutCr);
+    jerseyColorDetector=new JerseyColorDetector(width, height, lutCb, lutCr);
+    integralImage=new IntegralImage(width, height, lutCb, lutCr);
+    hypothesesGenerator=new HypothesesGeneratorScanlines(width, height, lutCb, lutCr, config);
+    robotDetector=new RobotDetector(width, height, lutCb, lutCr, ballFeatureExtractor, config);
+    
+    if(config.activateObjectDetector)
+    {
+        objectDetector = new ObjectDetector(width, height, lutCb, lutCr, ballFeatureExtractor, config);
+        ballDetector = objectDetector;
+    }
+    else
+    {
+        ballDetector = new BallDetectorLegacy(width, height, lutCb, lutCr, ballFeatureExtractor, config);
+        objectDetector = nullptr;
+    }
 }
 
-HTWKVision::~HTWKVision(){}
+HTWKVision::~HTWKVision(){
+    delete fieldColorDetector;
+    delete fieldDetector;
+    delete regionClassifier;
+    delete lineDetector;
+    delete goalDetector;
+    delete ballFeatureExtractor;
 
-void HTWKVision::proceed(uint8_t *img, bool is_upper_cam, bool use_feet_detection){
+    if(ballDetector == objectDetector) {
+        delete ballDetector;
+        ballDetector = nullptr;
+        objectDetector = nullptr;
+    } else {
+        delete ballDetector;
+        delete objectDetector;
+    }
 
-    if(enableProfiling) tFieldColorDetector = high_resolution_clock::now();
+    delete ellipseFitter;
+    delete feetDetector;
+    delete robotAreaDetector;
+    delete robotClassifier;
+    delete nearObstacleDetector;
+    delete jerseyColorDetector;
+    delete integralImage;
+    delete hypothesesGenerator;
+    //delete robotDetector;
+
+    free(lutCb);
+    free(lutCr);
+}
+
+void HTWKVision::proceed(uint8_t *img, bool use_feet_detection, float pitch, float roll){
+
+    if(enableProfiling) getTime(tIntegralImage);
+    integralImage->proceed(img);
+
+    if(enableProfiling) getTime(tFieldColorDetector);
     fieldColorDetector->proceed(img);
 
-    if(enableProfiling) tRegionClassifier = high_resolution_clock::now();
+    if(enableProfiling) getTime(tRegionClassifier);
     regionClassifier->proceed(img, fieldColorDetector);
 
-    if(enableProfiling) tFieldDetector = high_resolution_clock::now();
-    fieldDetector->proceed(	img, fieldColorDetector, regionClassifier);
+    if(enableProfiling) getTime(tFieldDetector);
+    fieldDetector->proceed(	img, fieldColorDetector, regionClassifier, config.isUpperCam);
 
-    if(enableProfiling) tLineDetector = high_resolution_clock::now();
+    if(enableProfiling) getTime(tLineDetector);
     lineDetector->proceed(	img,
                             regionClassifier->getLineSegments(fieldDetector->getConvexFieldBorder()),
                             regionClassifier->lineSpacing);
 
-    if(enableProfiling) tGoalDetector = high_resolution_clock::now();
-    goalDetector->proceed(	img,
-                            fieldDetector->getConvexFieldBorder(),
-                            fieldColorDetector->getColor(),
-                            lineDetector->getColor());
+    if(enableProfiling) getTime(tGoalDetector);
+//    goalDetector->proceed(	img,
+//                            fieldDetector->getConvexFieldBorder(),
+//                            fieldColorDetector->getColor(),
+//                            lineDetector->getColor());
 
-    if(enableProfiling) tBallDetector = high_resolution_clock::now();
-    ballDetector->proceed(	img,
-                            fieldDetector->getConvexFieldBorder(),
-                            fieldColorDetector->getColor(),
-                            lineDetector->getColor(),
-                            goalDetector->getColor());
+    if(enableProfiling) getTime(tHypoGenerator);
+    hypothesesGenerator->proceed(   img,
+                                    fieldDetector->getConvexFieldBorder(),
+                                    pitch,
+                                    roll,
+                                    integralImage);
+    std::vector<ObjectHypothesis> hypotheses = hypothesesGenerator->getHypotheses();
+    if(enableProfiling) getTime(tBallDetector);
+    ballDetector->proceed(img, hypotheses);
 
-    if(enableProfiling) tFeetDetector         = high_resolution_clock::now();
-    if(enableProfiling) tNearObstacleDetector = high_resolution_clock::now();
+    if(enableProfiling) getTime(tFeetDetector);
+//    robotDetector->proceed( img,
+//                            hypotheses);
 
-    if(!is_upper_cam){        
-        feetDetector->proceed(	img, fieldColorDetector, ballDetector->getColor(),ballDetector->isBallFound(), use_feet_detection);
-        if(enableProfiling) tNearObstacleDetector = high_resolution_clock::now();
+    if(enableProfiling) getTime(tNearObstacleDetector);
+    if(!config.isUpperCam){
+        const color c{180, 180, 100};
+        feetDetector->proceed(	img, fieldColorDetector, c, ballDetector->isBallFound(), use_feet_detection);
+        if(enableProfiling) getTime(tNearObstacleDetector);
         nearObstacleDetector->proceed(img, fieldColorDetector);
     }
 
-    if(enableProfiling) tEllipseFitter = high_resolution_clock::now();
-    if(enableProfiling) tRobotArea = high_resolution_clock::now();
-    if(enableProfiling) tJersey = high_resolution_clock::now();
+    if(config.isUpperCam) {  //TODO robot detection currently only for upper camera
+        if(enableProfiling) getTime(tEllipseFitter);
+        ellipseFitter->proceed(regionClassifier->getLineSegments(fieldDetector->getConvexFieldBorder()));
 
-    resultRobotClassifier.clear();
-    if(is_upper_cam) {  //TODO robot detection currently only for upper camera
-        ellipseFitter->proceed(regionClassifier->getLineSegments(fieldDetector->getConvexFieldBorder()),lineDetector->lineEdges);
+        if(enableProfiling) getTime(tRobotHypotheses);
+//        robotAreaDetector->proceed(regionClassifier->getScanVertical(), fieldDetector->getConvexFieldBorder(),
+//                                                           pitch, roll);
 
-        if(enableProfiling) tRobotArea = high_resolution_clock::now();
-        cntCreateIntegralImage += robotAreaDetector->proceed(img, regionClassifier->getScanVertical(), fieldDetector->getConvexFieldBorder(),
-                                                           fieldColorDetector,ballDetector->getBall(),goalDetector->getGoalPosts());
+        if(enableProfiling) getTime(tRobotClassifier);
+//        resultRobotClassifier.clear();
+//        int rectCounter=0;
+//        for(RobotRect rect : *robotAreaDetector->getRobotAreas()) {
+//            rectCounter++;
+//            RobotClassifierResult res;
+//            robotClassifier->proceed(img, rect, res);
 
-        tJersey = high_resolution_clock::now();
-        int rectCounter =0;
-        for(RobotRect rect : *robotAreaDetector->getRobotAreas()) {
-            rectCounter++;
-            RobotClassifierResult res;
-            robotClassifier->proceed(img, rect, res);
-
-            res.teamColor=TeamMembership::NONE;
-            if(res.detectionProbability > 0.125f){
-                res.isBlueJersey = jerseyColorDetector->isBlueJersey(img, rect);
-
-                if(res.isBlueJersey > 0.67f){
-                    res.teamColor = TeamMembership::BLUE;
-                } else if(res.isBlueJersey < 0.33f){
-                    res.teamColor = TeamMembership::RED;
-                }
-            }
-
-            resultRobotClassifier.push_back(res);
-        }
+//            resultRobotClassifier.push_back(res);
+//        }
     }
-
-    printProfilingResults();
+    if(enableProfiling) getTime(tJersey);
+    if(enableProfiling){
+        getTime(tEnd);
+        createProfilingStats();
+    }
 }
 
-void HTWKVision::printProfilingResults()
+static float diff(timespec end, timespec start)
 {
-    if(enableProfiling) {
-        high_resolution_clock::time_point tEnd = high_resolution_clock::now();
+    timespec temp;
+    if ((end.tv_nsec-start.tv_nsec)<0) {
+        temp.tv_sec = end.tv_sec-start.tv_sec-1;
+        temp.tv_nsec = 1000000000+end.tv_nsec-start.tv_nsec;
+    } else {
+        temp.tv_sec = end.tv_sec-start.tv_sec;
+        temp.tv_nsec = end.tv_nsec-start.tv_nsec;
+    }
+    return temp.tv_nsec/1e6;
+}
 
-        static const int IMG_CNT = 30*5;
+void HTWKVision::createProfilingStats()
+{
+    float dCreateIntegralImage  = diff(tFieldColorDetector, tIntegralImage);
+    float dFieldColorDetector   = diff(tRegionClassifier, tFieldColorDetector);
+    float dRegionClassifier     = diff(tFieldDetector, tRegionClassifier);
+    float dFieldDetector        = diff(tLineDetector, tFieldDetector);
+    float dLineDetector         = diff(tGoalDetector, tLineDetector);
+    float dGoalDetector         = diff(tHypoGenerator, tGoalDetector);
+    float dHypoGenerator        = diff(tBallDetector, tHypoGenerator);
+    float dBallDetector         = diff(tFeetDetector, tBallDetector);
+    float dFeetDetector         = diff(tNearObstacleDetector, tFeetDetector);
+    float dNearObstacleDetector = diff(tEllipseFitter, tNearObstacleDetector);
+    float dEllipseFitter        = diff(tRobotHypotheses, tEllipseFitter);
+    float dRobotHypotheses      = diff(tRobotClassifier, tRobotHypotheses);
+    float dRobotClassifier      = diff(tJersey, tRobotClassifier);
+    //float dJersey               = diff(tIntegralImage, tJersey);
+    float dTotal                = diff(tEnd, tFieldColorDetector);
 
-        duration<double> dFieldColorDetector   = duration_cast<duration<double>>(tRegionClassifier - tFieldColorDetector);
-        duration<double> dRegionClassifier     = duration_cast<duration<double>>(tFieldDetector - tRegionClassifier);
-        duration<double> dFieldDetector        = duration_cast<duration<double>>(tLineDetector - tFieldDetector);
-        duration<double> dLineDetector         = duration_cast<duration<double>>(tGoalDetector - tLineDetector);
-        duration<double> dGoalDetector         = duration_cast<duration<double>>(tBallDetector - tGoalDetector);
-        duration<double> dBallDetector         = duration_cast<duration<double>>(tFeetDetector - tBallDetector);
-        duration<double> dFeetDetector         = duration_cast<duration<double>>(tNearObstacleDetector - tFeetDetector);
-        duration<double> dNearObstacleDetector = duration_cast<duration<double>>(tEllipseFitter - tNearObstacleDetector);
-        duration<double> dEllipseFitter        = duration_cast<duration<double>>(tRobotArea - tEllipseFitter);
-        duration<double> dRobotArea            = duration_cast<duration<double>>(tJersey - tRobotArea);
-        duration<double> dJersey               = duration_cast<duration<double>>(tEnd - tJersey);
-        duration<double> dTotal                = duration_cast<duration<double>>(tEnd - tFieldColorDetector);
+    cntFieldColorDetector   += dFieldColorDetector;
+    cntRegionClassifier     += dRegionClassifier;
+    cntFieldDetector        += dFieldDetector;
+    cntLineDetector         += dLineDetector;
+    cntGoalDetector         += dGoalDetector;
+    cntHypoGenerator        += dHypoGenerator;
+    cntBallDetector         += dBallDetector;
+    cntFeetDetector         += dFeetDetector;
+    cntNearObstacleDetector += dNearObstacleDetector;
+    cntEllipseFitter        += dEllipseFitter;
+    cntRobotHypotheses      += dRobotHypotheses;
+    cntRobotClassifier      += dRobotClassifier;
+    cntJersey               += 0;//dJersey;
+    cntCreateIntegralImage  += dCreateIntegralImage;
+    cntTotal                += dTotal;
 
-        cntFieldColorDetector   += dFieldColorDetector.count()*1000;
-        cntRegionClassifier     += dRegionClassifier.count()*1000;
-        cntFieldDetector        += dFieldDetector.count()*1000;
-        cntLineDetector         += dLineDetector.count()*1000;
-        cntGoalDetector         += dGoalDetector.count()*1000;
-        cntBallDetector         += dBallDetector.count()*1000;
-        cntFeetDetector         += dFeetDetector.count()*1000;
-        cntNearObstacleDetector += dNearObstacleDetector.count()*1000;
-        cntEllipseFitter        += dEllipseFitter.count()*1000;
-        cntRobotArea            += dRobotArea.count()*1000;
-        cntJersey               += dJersey.count()*1000;
-        cntTotal                += dTotal.count()*1000;
-        cntImages++;
+    maxFieldColorDetector   = std::max(maxFieldColorDetector,   dFieldColorDetector);
+    maxRegionClassifier     = std::max(maxRegionClassifier,     dRegionClassifier);
+    maxFieldDetector        = std::max(maxFieldDetector,        dFieldDetector);
+    maxLineDetector         = std::max(maxLineDetector,         dLineDetector);
+    maxGoalDetector         = std::max(maxGoalDetector,         dGoalDetector);
+    maxHypoGenerator        = std::max(maxHypoGenerator,        dHypoGenerator);
+    maxBallDetector         = std::max(maxBallDetector,         dBallDetector);
+    maxFeetDetector         = std::max(maxFeetDetector,         dFeetDetector);
+    maxNearObstacleDetector = std::max(maxNearObstacleDetector, dNearObstacleDetector);
+    maxEllipseFitter        = std::max(maxEllipseFitter,        dEllipseFitter);
+    maxRobotHypotheses      = std::max(maxRobotHypotheses,      dRobotHypotheses);
+    maxRobotClassifier      = std::max(maxRobotClassifier,      dRobotClassifier);
+    maxJersey               = 0;//std::max(maxJersey,               dJersey);
+    maxCreateIntegralImage  = std::max(maxCreateIntegralImage,  dCreateIntegralImage);
 
-        if(cntImages == IMG_CNT) {
-            cntImages = 0;
-            printf("total: %.fms, fc: %.2fms, rc: %.2fms, fd: %.2fms, ld: %.2fms, gd: %.2fms, bd: %.2fms, fd: %.2fms, nod: %.2fms, ef: %.2fms, ra: %.2fms, jd: %.2fms, ii: %.2f\n",
-                   cntTotal/IMG_CNT,
-                   cntFieldColorDetector/IMG_CNT,
-                   cntRegionClassifier/IMG_CNT,
-                   cntFieldDetector/IMG_CNT,
-                   cntLineDetector/IMG_CNT,
-                   cntGoalDetector/IMG_CNT,
-                   cntBallDetector/IMG_CNT,
-                   cntFeetDetector/IMG_CNT,
-                   cntNearObstacleDetector/IMG_CNT,
-                   cntEllipseFitter/IMG_CNT,
-                   cntRobotArea/IMG_CNT,
-                   cntJersey/IMG_CNT,
-                   cntCreateIntegralImage/IMG_CNT
-                   );
-            cntFieldColorDetector=0;
-            cntRegionClassifier=0;
-            cntFieldDetector=0;
-            cntLineDetector=0;
-            cntGoalDetector=0;
-            cntBallDetector=0;
-            cntFeetDetector=0;
-            cntNearObstacleDetector=0;
-            cntEllipseFitter=0;
-            cntRobotArea=0;
-            cntJersey=0;
-            cntCreateIntegralImage=0;
-            cntTotal=0;
+    minFieldColorDetector   = std::min(minFieldColorDetector,   dFieldColorDetector);
+    minRegionClassifier     = std::min(minRegionClassifier,     dRegionClassifier);
+    minFieldDetector        = std::min(minFieldDetector,        dFieldDetector);
+    minLineDetector         = std::min(minLineDetector,         dLineDetector);
+    minGoalDetector         = std::min(minGoalDetector,         dGoalDetector);
+    minHypoGenerator        = std::min(minHypoGenerator,        dHypoGenerator);
+    minBallDetector         = std::min(minBallDetector,         dBallDetector);
+    minFeetDetector         = std::min(minFeetDetector,         dFeetDetector);
+    minNearObstacleDetector = std::min(minNearObstacleDetector, dNearObstacleDetector);
+    minEllipseFitter        = std::min(minEllipseFitter,        dEllipseFitter);
+    minRobotHypotheses      = std::min(minRobotHypotheses,      dRobotHypotheses);
+    minRobotClassifier      = std::min(minRobotClassifier,      dRobotClassifier);
+    minJersey               = 0;//std::min(minJersey,               dJersey);
+    minCreateIntegralImage  = std::min(minCreateIntegralImage,  dCreateIntegralImage);
+
+    maxTotal = minFieldColorDetector + maxRegionClassifier + maxFieldDetector + maxLineDetector + maxGoalDetector + maxHypoGenerator + maxBallDetector + maxFeetDetector + maxNearObstacleDetector + maxEllipseFitter + maxRobotHypotheses + maxRobotClassifier + maxJersey + maxCreateIntegralImage;
+    minTotal = minFieldColorDetector + minRegionClassifier + minFieldDetector + minLineDetector + minGoalDetector + minHypoGenerator + minBallDetector + minFeetDetector + minNearObstacleDetector + minEllipseFitter + minRobotHypotheses + minRobotClassifier + minJersey + minCreateIntegralImage;
+    cntImage++;
+}
+
+
+inline void HTWKVision::writeProfilHeader(const std::string& fileName) {
+    if (FILE *check = fopen(fileName.c_str(), "r")) {
+        fclose(check);
+    }else{
+        std::ofstream file;
+        file.open(fileName, std::ios::out | std::ios::app);
+        if (file.is_open()) {
+            file << "image;";
+            writeHead(file,";","total");
+            writeHead(file,";","FieldColorDetector");
+            writeHead(file,";","RegionClassifier");
+            writeHead(file,";","FieldDetector");
+            writeHead(file,";","LineDetector");
+            writeHead(file,";","GoalDetector");
+            writeHead(file,";","CreateIntegralImage");
+            writeHead(file,";","HypoGenerator");
+            writeHead(file,";","BallDetector");
+            writeHead(file,";","FeetDetector");
+            writeHead(file,";","NearObstacleDetector");
+            writeHead(file,";","EllipseFitter");
+            writeHead(file,";","RobotHypotheses");
+            writeHead(file,";","RobotClassifier");
+            file << std::endl;
+            file << ";";
+            for (int i=0;i<14;i++)
+                file << "min;avg;max;";
+            file << std::endl;
+            file.close();
         }
     }
 }
 
+void HTWKVision::writeProfilingFile(const std::string& fileName, const std::string& imageName)
+{
+    if(enableProfiling && cntImage > 0) {
+        writeProfilHeader(fileName);
+
+        std::ofstream file;
+        file.open(fileName, std::ios::out | std::ios::app);
+        if (file.is_open()) {
+            std::string sep = ";";
+            file << imageName << sep;
+            writeData(file,sep,minTotal,                (cntTotal/cntImage),                 maxTotal);
+            writeData(file,sep,minFieldColorDetector,   (cntFieldColorDetector/cntImage),    maxFieldColorDetector);
+            writeData(file,sep,minRegionClassifier,     (cntRegionClassifier/cntImage),      maxRegionClassifier);
+            writeData(file,sep,minFieldDetector,        (cntFieldDetector/cntImage),         maxFieldDetector);
+            writeData(file,sep,minLineDetector,         (cntLineDetector/cntImage),          maxLineDetector);
+            writeData(file,sep,minGoalDetector,         (cntGoalDetector/cntImage),          maxGoalDetector);
+            writeData(file,sep,minCreateIntegralImage,  (cntCreateIntegralImage/cntImage),   maxCreateIntegralImage);
+            writeData(file,sep,minHypoGenerator,        (cntHypoGenerator/cntImage),         maxHypoGenerator);
+            writeData(file,sep,minBallDetector,         (cntBallDetector/cntImage),          maxBallDetector);
+            writeData(file,sep,minFeetDetector,         (cntFeetDetector/cntImage),          maxFeetDetector);
+            writeData(file,sep,minNearObstacleDetector, (cntNearObstacleDetector/cntImage),  maxNearObstacleDetector);
+            writeData(file,sep,minEllipseFitter,        (cntEllipseFitter/cntImage),         maxEllipseFitter);
+            writeData(file,sep,minRobotHypotheses,      (cntRobotHypotheses/cntImage),       maxRobotHypotheses);
+            writeData(file,sep,minRobotClassifier,      (cntRobotClassifier/cntImage),       maxRobotClassifier);
+            file << std::endl;
+            file.close();
+        }
+    }
+}
+
+void HTWKVision::printProfilingResults(bool isUpperCam)
+{
+    if(enableProfiling && cntImage > 0) {
+        printf("avg total: %06.2fms, fc: %05.2fms, rc: %05.2fms, fd: %05.2fms, ld: %05.2fms, gd: %05.2fms, hg: %05.2fms, bd: %05.2fms, fd: %05.2fms, nod: %05.2fms, ef: %05.2fms, rh: %05.2fms, rc: %05.2fms, ii: %05.5fms\n"
+               //"max total: %06.2fms, fc: %05.2fms, rc: %05.2fms, fd: %05.2fms, ld: %05.2fms, gd: %05.2fms, hg: %05.2fms, bd: %05.2fms, fd: %05.2fms, nod: %05.2fms, ef: %05.2fms, rh: %05.2fms, rc: %05.2fms, ii: %05.5fms\n"
+               "min total: %06.2fms, fc: %05.2fms, rc: %05.2fms, fd: %05.2fms, ld: %05.2fms, gd: %05.2fms, hg: %05.2fms, bd: %05.2fms, fd: %05.2fms, nod: %05.2fms, ef: %05.2fms, rh: %05.2fms, rc: %05.2fms, ii: %05.5fms\n\n",
+               cntTotal/cntImage,
+               cntFieldColorDetector/cntImage,
+               cntRegionClassifier/cntImage,
+               cntFieldDetector/cntImage,
+               cntLineDetector/cntImage,
+               cntGoalDetector/cntImage,
+               cntHypoGenerator/cntImage,
+               cntBallDetector/cntImage,
+               cntFeetDetector/cntImage,
+               cntNearObstacleDetector/cntImage,
+               cntEllipseFitter/cntImage,
+               cntRobotHypotheses/cntImage,
+               cntRobotClassifier/cntImage,
+               //cntJersey/cntImage,
+               cntCreateIntegralImage/cntImage,
+//               maxTotal,
+//               maxFieldColorDetector,
+//               maxRegionClassifier,
+//               maxFieldDetector,
+//               maxLineDetector,
+//               maxGoalDetector,
+//               maxHypoGenerator,
+//               maxBallDetector,
+//               maxFeetDetector,
+//               maxNearObstacleDetector,
+//               maxEllipseFitter,
+//               maxRobotHypotheses,
+//               maxRobotClassifier,
+//               //maxJersey,
+//               maxCreateIntegralImage,
+               minTotal,
+               minFieldColorDetector,
+               minRegionClassifier,
+               minFieldDetector,
+               minLineDetector,
+               minGoalDetector,
+               minHypoGenerator,
+               minBallDetector,
+               minFeetDetector,
+               minNearObstacleDetector,
+               minEllipseFitter,
+               minRobotHypotheses,
+               minRobotClassifier,
+               //minJersey,
+               minCreateIntegralImage
+               );
+        fflush(stdout);
+        resetProfilingStats(isUpperCam);
+    }
+}
+
+void HTWKVision::resetProfilingStats(bool isUpperCam)
+{
+    cntImage = 0;
+
+    cntFieldColorDetector=0;
+    cntRegionClassifier=0;
+    cntFieldDetector=0;
+    cntLineDetector=0;
+    cntGoalDetector=0;
+    cntCreateIntegralImage=0;
+    cntHypoGenerator=0;
+    cntBallDetector=0;
+    cntFeetDetector=0;
+    cntNearObstacleDetector=0;
+    cntEllipseFitter=0;
+    cntRobotHypotheses=0;
+    cntRobotClassifier=0;
+    cntJersey=0;
+    cntTotal=0;
+
+    maxFieldColorDetector=0;
+    maxRegionClassifier=0;
+    maxFieldDetector=0;
+    maxLineDetector=0;
+    maxGoalDetector=0;
+    maxCreateIntegralImage=0;
+    maxHypoGenerator=0;
+    maxBallDetector=0;
+    maxFeetDetector=0;
+    maxNearObstacleDetector=0;
+    maxEllipseFitter=0;
+    maxRobotHypotheses=0;
+    maxRobotClassifier=0;
+    maxJersey=0;
+    maxTotal=0;
+
+    minFieldColorDetector=99999999;
+    minRegionClassifier=99999999;
+    minFieldDetector=99999999;
+    minLineDetector=99999999;
+    minGoalDetector=99999999;
+    minCreateIntegralImage=99999999;
+    minHypoGenerator=99999999;
+    minBallDetector=99999999;
+    minFeetDetector=99999999;
+    minNearObstacleDetector=99999999;
+    minEllipseFitter=isUpperCam ? 99999999 : 0;
+    minRobotHypotheses=isUpperCam ? 99999999 : 0;
+    minRobotClassifier=isUpperCam ? 99999999 : 0;
+    minJersey=isUpperCam ? 99999999 : 0;
+    minTotal=99999999;
+}
 
 /**
  * creates a lookup table for fast access to the yuv422 pixel form in the camera image
@@ -194,21 +422,15 @@ void HTWKVision::printProfilingResults()
 void HTWKVision::createAdressLookups(){
     lutCb=(int8_t*)malloc(sizeof(*lutCb)*width);
     lutCr=(int8_t*)malloc(sizeof(*lutCr)*width);
-    for(int i=1;i<width;i++){
+    for(int i=0;i<width;i++){
         if((i&1)==0){
-            lutCb[i]=5;
+            lutCb[i]=1;
             lutCr[i]=3;
         }else{
-            lutCb[i]=3;
-            lutCr[i]=5;
+            lutCb[i]=-1;
+            lutCr[i]=1;
         }
-        while(lutCr[i]+i*2>=width*2)
-            lutCr[i]-=4;
-        while(lutCb[i]+i*2>=width*2)
-            lutCb[i]-=4;
     }
-    lutCb[0]=1;
-    lutCr[0]=3;
 }
 
 }  // namespace htwk

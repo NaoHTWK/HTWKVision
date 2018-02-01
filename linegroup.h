@@ -1,7 +1,7 @@
 #ifndef __LINEGROUP_H__
 #define __LINEGROUP_H__
 
-#include <lineedge.h>
+#include "lineedge.h"
 
 namespace htwk {
 

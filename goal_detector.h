@@ -5,11 +5,11 @@
 #include <utility>
 #include <vector>
 
-#include <base_detector.h>
-#include <classifier.h>
-#include <color.h>
-#include <goalpost.h>
-#include <point_2d.h>
+#include "base_detector.h"
+#include "classifier.h"
+#include "color.h"
+#include "goalpost.h"
+#include "point_2d.h"
 
 namespace htwk {
 
@@ -48,7 +48,7 @@ private:
                    int whiteCr,
                    color green);
     int findMaxWhite(uint8_t *img,
-                     point_2d base,
+                     point_2d &base,
                      int windowSize,
                      int windowSteps,
                      int searchSteps);
@@ -63,7 +63,7 @@ private:
     static const int scanlineCnt;
     static const int q;
     static const int minGoalPostToBorderDist;
-    static const bool detectYellowGoals;
+    static const bool detectDarkGoals;
     Classifier* goalClassifier;
 
     color goalColor;

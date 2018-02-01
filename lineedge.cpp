@@ -1,13 +1,12 @@
-#include <lineedge.h>
+#include "lineedge.h"
 
 #include <algorithm>
-#include <cmath>
 
-#include <linesegment.h>
+#include "linesegment.h"
 
 namespace htwk {
 
-LineEdge::LineEdge(const std::vector<LineSegment*>& seg) : segments(seg) {
+LineEdge::LineEdge(std::vector<LineSegment*>  seg) : segments(std::move(seg)) {
     px1=py1=px2=py2=0;
     nx=ny=d=x=y=0;
     id=0;
@@ -72,7 +71,7 @@ void LineEdge::update(){
 	    valid=false;
 	    return;
 	}
-	float lenInv=1./sqrt(vx*vx+vy*vy);//invSqrt(vx*vx+vy*vy);
+    float lenInv=1.f/std::sqrt(vx*vx+vy*vy);//invSqrt(vx*vx+vy*vy);
 	vx*=lenInv;
 	vy*=lenInv;
 	nx=vy;
@@ -94,7 +93,7 @@ void LineEdge::update(){
 	segments.clear();
 	for (LineSegment *lsCheck : segmentsFiltered){
 		float dist=lsCheck->x*nx+lsCheck->y*ny-d;
-		if(fabs(dist)<4){
+        if(fabsf(dist)<4){
 			segments.push_back(lsCheck);
 		}
 	}
@@ -123,7 +122,7 @@ void LineEdge::update(){
 }
 
 float LineEdge::estimateLineWidth(){
-	if(segments.size()==0)return 0;
+	if(segments.empty())return 0;
 	float lineWidth=0;
 	float minDist=9999;
 	for (const LineSegment *it : segments){
@@ -133,7 +132,7 @@ float LineEdge::estimateLineWidth(){
 		lineWidth+=distSq;
 		minDist=std::min(minDist,distSq);
 	}
-	return 0.5*(sqrt(minDist)+sqrt(lineWidth/segments.size()));
+    return 0.5f*(std::sqrt(minDist)+std::sqrt(lineWidth/segments.size()));
 }
 
 }  // namespace htwk
