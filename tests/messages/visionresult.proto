@@ -1,0 +1,132 @@
+package protobuf.test.vision;
+
+// This file contain everything which is recognize by the vision and can be
+// reconstructed by NaoControl.
+                                                                                   
+option java_package = "de.htwk_leipzig.vision.tests..protobuf";
+option java_outer_classname = "VisionLogProtos";  
+
+message FieldBorder {
+    repeated uint32 yCoord = 2; 
+}
+
+message LineSegment {
+    required uint32 x     = 1;
+    required uint32 y     = 2;
+    required float vx     = 3;
+    required float vy     = 4;
+    optional uint32 id    = 5 [default = 0];
+    optional uint32 linkX = 6 [default = 0];
+    optional uint32 linkY = 7 [default = 0];
+}
+
+message Robot {
+    required uint32 xLeft      = 1;
+    required uint32 xRight     = 2;
+    required uint32 yTop       = 3;
+    required uint32 yBottom    = 4;
+    optional float isBlue      = 5;
+    optional float confidence  = 6;
+}
+
+message LineEdge {
+    required float  px1	     = 1;
+    required float  px2	     = 2;
+    required float  py1	     = 3;
+    required float  py2	     = 4;
+    required float  nx	     = 5;
+    required float  ny	     = 6;
+    required float  d	     = 7;
+    required float  x	     = 8;
+    required float  y	     = 9;
+    required uint32 id	     = 10;
+    required uint32 matchCnt = 11;
+    required bool straight   = 12;
+    required bool valid      = 13;
+}
+
+message Line {
+    repeated LineEdge edges = 1;
+}
+
+message Ellipse {
+    required float a	      =  1;
+    required float b	      =  2;
+    required float c	      =  3;
+    required float d	      =  4;
+    required float e	      =  5;
+    required float f	      =  6;
+    required float a1	      =  7;
+    required float b1	      =  8;
+    required float c1	      =  9;
+    required float d1	      = 10;
+    required float e1	      = 11;
+    required float f1	      = 12;
+    required float ta	      = 13;
+    required float tb	      = 14;
+    required float brennpunkt = 15;
+}
+
+message Ball {
+    required uint32 x      = 1;
+    required uint32 y	   = 2;
+    required uint32 radius = 3;
+    required bool   found  = 4;
+}
+
+message Point2D {
+    required uint32 x = 1;
+    required uint32 y = 2;
+}
+
+message Point2Df {
+    required float x = 1;
+    required float y = 2;
+}
+
+message Odometrie {
+    required float x = 1;
+    required float y = 2;
+    required float z = 3;
+}
+
+message GoalPost {
+    required int32 width   = 9;
+    optional Point2D basePoint   = 10;
+    optional Point2D upperPoint  = 11;
+    optional float probability   = 12;
+    optional Color color         = 13;
+}
+
+message Color {
+    required uint32 cy = 1;
+    required uint32 cb = 2;
+    required uint32 cr = 3;
+}
+
+message LineCross {
+    required float px = 1;   
+    required float py = 2;   
+    required float vx = 3;   
+    required float vy = 4;   
+}
+
+message YPR {
+    required float yaw    = 1 [default = 0];
+    required float pitch  = 2 [default = 0];
+    required float roll   = 3 [default = 0];
+}
+
+message VisionFrame {
+    required Color       fieldColor   =  1;
+    required FieldBorder fieldBorder  =  2;
+    repeated LineSegment lineSegments =  3;
+    repeated GoalPost    goalPosts    =  4;
+    repeated Line        lines        =  5;
+    required Ellipse     ellipse      =  6;
+    required Ball        ball         =  7;
+    repeated LineCross   lineCrosses  =  8;
+    required Point2D     feet         =  9;
+    repeated Robot   	 robot        = 10;
+
+}
