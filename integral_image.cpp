@@ -7,12 +7,6 @@
 
 namespace htwk {
 
-const int IntegralImage::SRC_IMAGE_WIDTH=640;
-const int IntegralImage::SRC_IMAGE_HEIGHT=480;
-
-const int IntegralImage::iWidth  = IntegralImage::SRC_IMAGE_WIDTH/IntegralImage::INTEGRAL_SCALE;
-const int IntegralImage::iHeight = IntegralImage::SRC_IMAGE_HEIGHT/IntegralImage::INTEGRAL_SCALE;
-
 IntegralImage::IntegralImage(int width, int height, int8_t *lutCb, int8_t *lutCr)
 : BaseDetector(width, height, lutCb, lutCr)
 {

@@ -6,7 +6,13 @@ find_package(Boost 1.55 REQUIRED program_options filesystem system atomic)
 message("${Boost_LIBRARIES}")
 
 add_executable(demo demo.cpp)
-target_link_libraries(demo HTWKVision htwkimagetools ${Boost_LIBRARIES})
+
+target_link_libraries(
+    demo
+    HTWKVision
+    htwkimagetools
+    HTWKNeuronalNet
+    ${Boost_LIBRARIES})
 
 if(NOT DEFINED NAO_HW_VERSION)
     install(TARGETS demo DESTINATION ${CMAKE_SOURCE_DIR}/bin)

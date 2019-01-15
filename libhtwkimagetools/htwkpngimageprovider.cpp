@@ -30,7 +30,7 @@ std::string PngImageProvider::createCachedFileName(const std::string& filename)
     return filename + ".yuv422";
 }
 
-bool PngImageProvider::tryToLoadCached(const std::string& filename, uint8_t* buffer, const size_t bufferSize, float& pitch, float& roll)
+bool PngImageProvider::tryToLoadCached(const std::string& filename, uint8_t* buffer, const size_t bufferSize, float& pitch, float& roll, float& headPitch, float& headYaw)
 {
     std::string cachedFilename = createCachedFileName(filename);
     FILE* fp = fopen(cachedFilename.c_str(), "r");
@@ -48,6 +48,16 @@ bool PngImageProvider::tryToLoadCached(const std::string& filename, uint8_t* buf
         return false;
     }
 
+    if(fread(&headPitch, sizeof(headPitch), 1, fp) != 1) {
+        fclose(fp);
+        return false;
+    }
+
+    if(fread(&headYaw, sizeof(headYaw), 1, fp) != 1) {
+        fclose(fp);
+        return false;
+    }
+
     if(fread(buffer, bufferSize, 1, fp) != 1) {
         fclose(fp);
         return false;
@@ -57,7 +67,7 @@ bool PngImageProvider::tryToLoadCached(const std::string& filename, uint8_t* buf
     return true;
 }
 
-void PngImageProvider::saveCachedImage(const std::string& filename, const uint8_t* buffer, const size_t bufferSize, const float& pitch, const float& roll)
+void PngImageProvider::saveCachedImage(const std::string& filename, const uint8_t* buffer, const size_t bufferSize, const float& pitch, const float& roll, const float& headPitch, const float& headYaw)
 {
     std::string cachedFilename = createCachedFileName(filename);
     FILE* fp = fopen(cachedFilename.c_str(), "w");
@@ -73,6 +83,20 @@ void PngImageProvider::saveCachedImage(const std::string& filename, const uint8_
     }
 
     if(fwrite(&roll, sizeof(roll), 1, fp) != 1)
+    {
+        printf("Error writing cached file: %s\n", cachedFilename.c_str());
+        fclose(fp);
+        return;
+    }
+
+    if(fwrite(&headPitch, sizeof(headPitch), 1, fp) != 1)
+    {
+        printf("Error writing cached file: %s\n", cachedFilename.c_str());
+        fclose(fp);
+        return;
+    }
+
+    if(fwrite(&headYaw, sizeof(headYaw), 1, fp) != 1)
     {
         printf("Error writing cached file: %s\n", cachedFilename.c_str());
         fclose(fp);

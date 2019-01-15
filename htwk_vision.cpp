@@ -4,14 +4,14 @@
 
 namespace htwk {
 
-HTWKVision::HTWKVision(int width, int height, HtwkVisionConfig  _config)
+HTWKVision::HTWKVision(int width, int height, const HtwkVisionConfig&  _config)
     : width(width)
 //    , height(height)
-    , config(std::move(_config))
+    , config(_config)
 {
     createAdressLookups();
     fieldColorDetector=new FieldColorDetector(width, height, lutCb, lutCr);
-    fieldDetector=new FieldDetector(width, height, lutCb, lutCr);
+    fieldDetector=new FieldDetector(width, height, lutCb, lutCr, config);
     regionClassifier=new RegionClassifier(width, height, config.isUpperCam, lutCb, lutCr);
     goalDetector=new GoalDetector(width, height, lutCb, lutCr);
     lineDetector=new LineDetector(width, height, lutCb, lutCr);
@@ -24,12 +24,17 @@ HTWKVision::HTWKVision(int width, int height, HtwkVisionConfig  _config)
     jerseyColorDetector=new JerseyColorDetector(width, height, lutCb, lutCr);
     integralImage=new IntegralImage(width, height, lutCb, lutCr);
     hypothesesGenerator=new HypothesesGeneratorScanlines(width, height, lutCb, lutCr, config);
-    robotDetector=new RobotDetector(width, height, lutCb, lutCr, ballFeatureExtractor, config);
+    // TODO: Comment this in if you have a Caffe model for the robot detector.
+    // Want to use our model? Ask us!
+//    robotDetector=new RobotDetector(width, height, lutCb, lutCr, ballFeatureExtractor, config);
+//    obstacleDetectionLowCam=new ObstacleDetectionLowCam(width, height, lutCb, lutCr, _config);
     
     if(config.activateObjectDetector)
     {
-        objectDetector = new ObjectDetector(width, height, lutCb, lutCr, ballFeatureExtractor, config);
-        ballDetector = objectDetector;
+      // TODO: Comment this in if you have a Caffe model for the ball detector.
+      // Want to use our model? Ask us!
+//        objectDetector = new ObjectDetector(width, height, lutCb, lutCr, ballFeatureExtractor, config);
+//        ballDetector = objectDetector;
     }
     else
     {
@@ -47,9 +52,9 @@ HTWKVision::~HTWKVision(){
     delete ballFeatureExtractor;
 
     if(ballDetector == objectDetector) {
-        delete ballDetector;
-        ballDetector = nullptr;
-        objectDetector = nullptr;
+//        delete ballDetector;
+//        ballDetector = nullptr;
+//        objectDetector = nullptr;
     } else {
         delete ballDetector;
         delete objectDetector;
@@ -63,13 +68,14 @@ HTWKVision::~HTWKVision(){
     delete jerseyColorDetector;
     delete integralImage;
     delete hypothesesGenerator;
+    //delete obstacleDetectionLowCam;
     //delete robotDetector;
 
     free(lutCb);
     free(lutCr);
 }
 
-void HTWKVision::proceed(uint8_t *img, bool use_feet_detection, float pitch, float roll){
+void HTWKVision::proceed(uint8_t *img, bool use_feet_detection, float pitch, float roll, float headYaw){
 
     if(enableProfiling) getTime(tIntegralImage);
     integralImage->proceed(img);
@@ -102,7 +108,7 @@ void HTWKVision::proceed(uint8_t *img, bool use_feet_detection, float pitch, flo
                                     integralImage);
     std::vector<ObjectHypothesis> hypotheses = hypothesesGenerator->getHypotheses();
     if(enableProfiling) getTime(tBallDetector);
-    ballDetector->proceed(img, hypotheses);
+//    ballDetector->proceed(img, hypotheses);
 
     if(enableProfiling) getTime(tFeetDetector);
 //    robotDetector->proceed( img,
@@ -111,9 +117,11 @@ void HTWKVision::proceed(uint8_t *img, bool use_feet_detection, float pitch, flo
     if(enableProfiling) getTime(tNearObstacleDetector);
     if(!config.isUpperCam){
         const color c{180, 180, 100};
-        feetDetector->proceed(	img, fieldColorDetector, c, ballDetector->isBallFound(), use_feet_detection);
+        //feetDetector->proceed(img, fieldColorDetector, c, ballDetector->isBallFound(), use_feet_detection);
         if(enableProfiling) getTime(tNearObstacleDetector);
         nearObstacleDetector->proceed(img, fieldColorDetector);
+
+        //obstacleDetectionLowCam->proceed(headYaw, integralImage);
     }
 
     if(config.isUpperCam) {  //TODO robot detection currently only for upper camera

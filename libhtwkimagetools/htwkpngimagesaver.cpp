@@ -1,6 +1,7 @@
 #include "htwkpngimagesaver.h"
 
 #include <internal/htwkpngimagesaverlibpng.h>
+#include <internal/htwkpngimagesaverlodepng.h>
 
 namespace htwk {
 namespace image  {
@@ -8,6 +9,11 @@ namespace image  {
 PngImageSaver::PngImageSaver()
 {
 }
+
+PngImageSaver::~PngImageSaver()
+{
+}
+
 
 PngImageSaverPtr getPngImageSaverInstace()
 {

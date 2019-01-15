@@ -68,6 +68,10 @@ struct point_2d {
         return sqrtf(x*x+y*y);
     }
 
+    inline float magnitude() const {
+        return sqrtf(x*x+y*y);
+    }
+
     inline float norm_sqr() const {
         return x*x+y*y;
     }
@@ -78,6 +82,10 @@ struct point_2d {
 
     inline float dot(const point_2d& b) const {
         return x * b.x + y * b.y;
+    }
+
+    float angle_to(const point_2d& b) const {
+      return std::acos(dot(b) / (norm() * b.norm()));
     }
 
     inline std::tuple<float,float> tuple() const {

@@ -279,13 +279,13 @@ void HypothesesGeneratorScanlines::calculateBlockBlur(const float objectRadius, 
     int r=(int)(objectRadius*0.6f/IntegralImage::INTEGRAL_SCALE);
 
     if(RATING_SCALE == 2) {
-        if(px+RATING_SCALE/2-r>=0 && px+blockSize+r<IntegralImage::iWidth) {
+        if(px+RATING_SCALE/2-r>=0 && px+blockSize+2*RATING_SCALE+r<IntegralImage::iWidth) {
             calculateBlockBlurSSERatingScale2(objectRadius, px, py);
         } else {
             calculateBlockBlurBorder(objectRadius, px, py);
         }
     } else if(RATING_SCALE == 4) {
-        if(px+RATING_SCALE/2-r>=0 && px+blockSize+r<IntegralImage::iWidth) {
+        if(px+RATING_SCALE/2-r>=0 && px+blockSize+2*RATING_SCALE+r<IntegralImage::iWidth) {
             calculateBlockBlurSSERatingScale4(objectRadius, px, py);
         } else {
             calculateBlockBlurBorder(objectRadius, px, py);

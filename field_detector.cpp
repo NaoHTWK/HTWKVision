@@ -1,17 +1,26 @@
 #include "field_detector.h"
 
+#include <cmath>
 #include <cstring>
 
 using namespace std;
 
 namespace htwk {
 
-FieldDetector::FieldDetector(int width, int height, int8_t *lutCb, int8_t *lutCr)
+FieldDetector::FieldDetector(int width, int height, int8_t *lutCb, int8_t *lutCr, const HtwkVisionConfig &config)
     : BaseDetector(width, height, lutCb, lutCr)
 {
     fieldBorderFull = new int[width];
-    for (int x = 0; x < width; x++) {
-        fieldBorderFull[x] = height - 2;
+
+    if(config.isUpperCam) {
+        for (int x = 0; x < width; x++) {
+            fieldBorderFull[x] = height - 2;
+        }
+    } else {
+        // 0 means a field border on the top of the
+        // image, so that all pixels below are valid
+        // field pixels
+        memset(fieldBorderFull, 0, width*sizeof(*fieldBorderFull));
     }
 }
 
@@ -26,20 +35,21 @@ FieldDetector::~FieldDetector() {
 void FieldDetector::proceed(
         const uint8_t *const img, const FieldColorDetector *const field,
         const RegionClassifier *const regionClassifier, const bool isUpper) {
+
 	if(!isUpper){
-        // 0 means a field border on the top of the
-        // image, so that all pixels below are valid
-        // field pixels
-        memset(fieldBorderFull, 0, width*sizeof(*fieldBorderFull));
 		return;
 	}
+
+    borderPoints.clear();
+    vector<point_2d> pointsLeft;
+    vector<point_2d> pointsDone;
+
     // search possible points on the field-border
     //(points on edges, with a green color on the bottom and not a green or white
     //color on the top)
     int lineSpacing = regionClassifier->getLineSpacing();
     int offset = lineSpacing / 2;
-    vector<point_2d> borderPoints;
-    fieldBorderLines.clear();
+
     for (int x = offset; x < width; x += lineSpacing) {
         Scanline sl = regionClassifier->getScanVertical()[x / lineSpacing];
         for (int i = 0; i < sl.edgeCnt - 1 && i < maxEdgesPerScanline; i++) {
@@ -47,18 +57,11 @@ void FieldDetector::proceed(
             int py1 = sl.edgesY[i];
             int px2 = sl.edgesX[i + 1];
             int py2 = sl.edgesY[i + 1];
-            if (i > 0 && !sl.regionsIsGreen[i] && !sl.regionsIsWhite[i] &&
-                    sl.regionsIsGreen[i - 1]) {
-                point_2d p;
-                p.x = px1;
-                p.y = py1;
-                borderPoints.push_back(p);
+            if (i > 0 && !sl.regionsIsGreen[i] && !sl.regionsIsWhite[i] && sl.regionsIsGreen[i - 1]) {
+                borderPoints.emplace_back(px1, py1);
             }
             if (i == sl.edgeCnt - 2 && sl.regionsIsGreen[i]) {
-                point_2d p;
-                p.x = px2;
-                p.y = py2;
-                borderPoints.push_back(p);
+                borderPoints.emplace_back(px2, py2);
             }
         }
     }
@@ -71,46 +74,46 @@ void FieldDetector::proceed(
         int maxSum = 0;
         int pointsCnt = 0;
         for (int i = 0; i < 200; i++) {
-            point_2d p1 = borderPoints.at((int)(dist(rng) * borderPoints.size()));
-            point_2d p2 = borderPoints.at((int)(dist(rng) * borderPoints.size()));
-            if (p1.x != p2.x || p1.y != p2.y) {
-                if (p1.x > p2.x) {
-                    point_2d tmp = p1;
-                    p1 = p2;
-                    p2 = tmp;
+            point_2d p1 = borderPoints[(int)(dist(rng) * borderPoints.size())];
+            point_2d p2 = borderPoints[(int)(dist(rng) * borderPoints.size())];
+            if (p1 == p2)
+                continue;
+            if (p1.x > p2.x) {
+                point_2d tmp = p1;
+                p1 = p2;
+                p2 = tmp;
+            }
+            float dx = p1.x - p2.x;
+            float dy = p1.y - p2.y;
+            float len = std::sqrt(dx * dx + dy * dy);
+            if (len < 16) continue;
+            float nx = -dy / len;
+            float ny = dx / len;
+            float d = nx * p1.x + ny * p1.y;
+            int sum = 0;
+            int cnt = 0;
+            for (const point_2d& p : borderPoints) {
+                float dist = nx * p.x + ny * p.y - d;
+                if (std::fabs(dist) < 1.5f) {
+                    cnt++;
+                    sum += 1;
+                } else if (dist > 4 && dist < 32) {
+                    sum -= 1;
                 }
-                int dx = p1.x - p2.x;
-                int dy = p1.y - p2.y;
-                float len = sqrt(dx * dx + dy * dy);
-                if (len < 16) continue;
-                float nx = -dy / len;
-                float ny = dx / len;
-                float d = nx * p1.x + ny * p1.y;
-                int sum = 0;
-                int cnt = 0;
-                for (const point_2d &p : borderPoints) {
-                    float dist = nx * p.x + ny * p.y - d;
-                    if (fabsf(dist) < 1.5f) {
-                        cnt++;
-                        sum += 1;
-                    } else if (dist > 4 && dist < 32) {
-                        sum -= 1;
-                    }
-                }
-                if (sum > maxSum) {
-                    maxSum = sum;
-                    pointsCnt = cnt;
-                    bestNx = nx;
-                    bestNy = ny;
-                    bestD = d;
-                }
+            }
+            if (sum > maxSum) {
+                maxSum = sum;
+                pointsCnt = cnt;
+                bestNx = nx;
+                bestNy = ny;
+                bestD = d;
             }
         }
         // if enough points left, search for the best second line matching for the
         // rest of the border points with RANSAC algorithm
         if (pointsCnt >= 5) {
-            vector<point_2d> pointsLeft;
-            vector<point_2d> pointsDone;
+            pointsLeft.clear();
+            pointsDone.clear();
             for (const point_2d &p : borderPoints) {
                 float dist = fabsf(bestNx * p.x + bestNy * p.y - bestD);
                 if (dist >= 1) {
@@ -126,64 +129,49 @@ void FieldDetector::proceed(
             if (pointsLeft.size() >= 4) {
                 int maxSum2 = 0;
                 for (int i = 0; i < 200; i++) {
-                    point_2d p1 = pointsLeft.at((int)(dist(rng) * pointsLeft.size()));
-                    point_2d p2 = pointsLeft.at((int)(dist(rng) * pointsLeft.size()));
-                    if (p1.x != p2.x || p1.y != p2.y) {
-                        if (p1.x > p2.x) {
-                            point_2d tmp = p1;
-                            p1 = p2;
-                            p2 = tmp;
+                    point_2d p1 = pointsLeft[(int)(dist(rng) * pointsLeft.size())];
+                    point_2d p2 = pointsLeft[(int)(dist(rng) * pointsLeft.size())];
+                    if (p1 == p2)
+                        continue;
+                    if (p1.x > p2.x) {
+                        point_2d tmp = p1;
+                        p1 = p2;
+                        p2 = tmp;
+                    }
+                    float dx = p1.x - p2.x;
+                    float dy = p1.y - p2.y;
+                    float len = std::sqrt(dx * dx + dy * dy);
+                    if (len < 16) continue;
+                    float nx = -dy / len;
+                    float ny = dx / len;
+                    float d = nx * p1.x + ny * p1.y;
+                    int sum = 0;
+                    int cnt = 0;
+                    for (const point_2d &p : pointsLeft) {
+                        float dist = nx * p.x + ny * p.y - d;
+                        if (fabsf(dist) < 2) {
+                            sum += 2;
+                            cnt++;
+                        } else if (dist > 3 && dist < 20) {
+                            sum -= 1;
                         }
-                        int dx = p1.x - p2.x;
-                        int dy = p1.y - p2.y;
-                        float len = sqrtf(dx * dx + dy * dy);
-                        if (len < 16) continue;
-                        float nx = -dy / len;
-                        float ny = dx / len;
-                        float d = nx * p1.x + ny * p1.y;
-                        int sum = 0;
-                        int cnt = 0;
-                        for (const point_2d &p : pointsLeft) {
-                            float dist = nx * p.x + ny * p.y - d;
-                            if (fabsf(dist) < 2) {
-                                sum += 2;
-                                cnt++;
-                            } else if (dist > 3 && dist < 20) {
-                                sum -= 1;
-                            }
+                    }
+                    for (const point_2d &p : pointsDone) {
+                        float dist = nx * p.x + ny * p.y - d;
+                        if (dist > 2) {
+                            sum -= 2;
                         }
-                        for (const point_2d &p : pointsDone) {
-                            float dist = nx * p.x + ny * p.y - d;
-                            if (dist > 2) {
-                                sum -= 2;
-                            }
-                        }
-                        if (sum > maxSum2) {
-                            maxSum2 = sum;
-                            pointsCnt2 = cnt;
-                            bestNx2 = nx;
-                            bestNy2 = ny;
-                            bestD2 = d;
-                        }
+                    }
+                    if (sum > maxSum2) {
+                        maxSum2 = sum;
+                        pointsCnt2 = cnt;
+                        bestNx2 = nx;
+                        bestNy2 = ny;
+                        bestD2 = d;
                     }
                 }
             }
-            Line best;
-            if(bestNy != 0) {
-                best = Line(0, bestD/bestNy, width-1, (bestD-bestNx*(width-1))/bestNy);
-            } else if (bestNy2 == 0 ) {
-                fieldBorderLines.push_back(best);
-            } else {
-                Line best2(0, bestD2/bestNy2, width-1, (bestD2-bestNx2*(width-1))/bestNy2);
-                point_2d intersection = best.getIntersection(best2);
-                if (best.py1 > best2.py1) {
-                    fieldBorderLines.emplace_back(best.px1, best.py1, intersection.x, intersection.y);
-                    fieldBorderLines.emplace_back(intersection.x, intersection.y, best2.px2, best2.py2);
-                } else {
-                    fieldBorderLines.emplace_back(best2.px1, best2.py1, intersection.x, intersection.y);
-                    fieldBorderLines.emplace_back(intersection.x, intersection.y, best.px2, best.py2);
-                }
-            }
+
             //interpolate the field-border from one or two lines
             for (int x = 0; x < width; x++) {
                 if (bestNy == 0) continue;
@@ -205,21 +193,8 @@ void FieldDetector::proceed(
                 // field pixels
             }
         }
-        // TODO: maybe forgotten to update fieldBorderFull here???
     }
-
-    // reset green or white classified segments above the field border, because we
-    // do not wish to detect something above our field border!
-    for (int x = offset; x < width; x += lineSpacing) {
-        Scanline sl = regionClassifier->getScanVertical()[x / lineSpacing];
-        for (int i = 0; i < sl.edgeCnt - 1 && i < maxEdgesPerScanline; i++) {
-            int py1 = sl.edgesY[i];
-            if (py1 < fieldBorderFull[x] + 4) {
-                sl.regionsIsGreen[i] = false;
-                sl.regionsIsWhite[i] = false;
-            }
-        }
-    }
+    // use fieldBorderFull from last frame.
 }
 
 }

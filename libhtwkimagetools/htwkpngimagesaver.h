@@ -14,6 +14,7 @@ class PngImageSaver
 {
 public:
     PngImageSaver();
+    virtual ~PngImageSaver();
 
     virtual bool saveRgbaToPngImage(const std::string& filename, uint32_t width, uint32_t height, const std::vector<uint8_t>& rgba) = 0;
 };

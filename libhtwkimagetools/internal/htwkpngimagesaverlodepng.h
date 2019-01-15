@@ -10,6 +10,7 @@ class PngImageSaverLodePng : public PngImageSaver
 {
 public:
     PngImageSaverLodePng();
+    ~PngImageSaverLodePng() override;
 
     bool saveRgbaToPngImage(const std::string& filename, uint32_t width, uint32_t height, const std::vector<uint8_t>& rgba) override;
 };

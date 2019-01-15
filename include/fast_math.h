@@ -213,6 +213,11 @@ static float dist(const T1 &pos1,const T2 &pos2){
 	return sqrtf((pos1.x-pos2.x)*(pos1.x-pos2.x)+(pos1.y-pos2.y)*(pos1.y-pos2.y));
 }
 
+template<typename T1,typename T2>
+static float dist_sqr(const T1 &pos1,const T2 &pos2){
+    return (pos1.x-pos2.x)*(pos1.x-pos2.x)+(pos1.y-pos2.y)*(pos1.y-pos2.y);
+}
+
 template <class U> struct closer {
     const U& a;
     explicit closer(const U& a) : a(a) {}

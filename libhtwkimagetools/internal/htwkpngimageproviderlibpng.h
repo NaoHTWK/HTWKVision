@@ -23,7 +23,7 @@ public:
     PngImageProviderLibPng(const uint32_t expectedWidth, const uint32_t expectedHeight);
     ~PngImageProviderLibPng() override;
 
-    bool loadAsYuv422(const std::string& filename, uint8_t* buffer, const size_t bufferSize, float& pitch, float& roll) override;
+    bool loadAsYuv422(const std::string& filename, uint8_t* buffer, const size_t bufferSize, float& pitch, float& roll, float &headPitch, float &headYaw) override;
 };
 
 } // images

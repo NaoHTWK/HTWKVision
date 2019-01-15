@@ -11,11 +11,11 @@ private:
     int* integralImg;
 
 public:
-    static const int SRC_IMAGE_WIDTH;
-    static const int SRC_IMAGE_HEIGHT;
+    static constexpr int SRC_IMAGE_WIDTH = 640;
+    static constexpr int SRC_IMAGE_HEIGHT = 480;
     static constexpr int INTEGRAL_SCALE = 2;//only 1,2 or 4
-    static const int iWidth;
-    static const int iHeight;
+    static constexpr int iWidth  = SRC_IMAGE_WIDTH/INTEGRAL_SCALE;
+    static constexpr int iHeight = SRC_IMAGE_HEIGHT/INTEGRAL_SCALE;
 
     IntegralImage(int width, int height, int8_t *lutCb, int8_t *lutCr) __attribute__((nonnull));
     ~IntegralImage();

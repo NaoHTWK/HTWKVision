@@ -7,7 +7,8 @@ using namespace std;
 
 namespace htwk {
 
-int RegionClassifier::tEdge = 2 * 16;  // minimal edge-intensity
+// between 8 for Tape-Lines and up to 32 for artificial grass
+int RegionClassifier::tEdge = 20;  // minimal edge-intensity
 
 int RegionClassifier::maxEdgesInLine =
         3;  // because of multiple edges in one lineregion

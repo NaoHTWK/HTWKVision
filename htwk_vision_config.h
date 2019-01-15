@@ -13,10 +13,10 @@ namespace htwk {
  */
 struct HtwkVisionConfig {
     // From which probability on a hypothesis is for sure a ball
-    float ballProbabilityThreshold = 0.967f;
+    float ballProbabilityThreshold = 0.97f;
 
     // From which probability on a hypothesis is for sure a penaltyspot
-    float penaltyspotProbabilityThreshold = 0.967f;
+    float penaltyspotProbabilityThreshold = 0.97f;
 
     // From which probability on a hypothesis is for sure a feet
     float feetProbabilityThreshold = 0.964f;
@@ -30,6 +30,14 @@ struct HtwkVisionConfig {
     size_t hypothesisGeneratorMaxHypothesisCount = 16;
 
     bool isUpperCam = true;
+
+    // How many rows and cols are used by the obstacle detection
+    int obstacleDetectionInputHeight = 15;
+    int obstacleDetectionInputWidth  = 15;
+    std::string obstacleDetectorNetwork = "./data/obstacle_classifier_runtime.prototxt";
+    std::string obstacleDetectorModel   = "./data/obstacle_classifier_runtime.caffemodel";
+    int obstacleBatchSize = 1;
+    bool obstacleClassifyData = true;
 };
 
 } // htwk

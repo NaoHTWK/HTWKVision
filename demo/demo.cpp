@@ -1,6 +1,10 @@
-#include "htwk_vision.h"
+#include <htwk_vision.h>
 
 #include <chrono>
+#include <iostream>
+#include <fstream>
+#include <set>
+#include <string>
 
 #include <boost/program_options.hpp>
 
@@ -314,22 +318,23 @@ void drawRatingHypo(const string &name, const uint8_t * const orig_img, Hypothes
 }
 
 void drawBall(const string &name, const uint8_t * const orig_img, BallDetector *bd, int width, int height){
-    uint8_t *img = (uint8_t*) malloc(sizeof(uint8_t) * width * height * 2);
-    memcpy(img, orig_img, sizeof(uint8_t) * width * height * 2);
     if(bd->isBallFound()){
+        uint8_t *img = (uint8_t*) malloc(sizeof(uint8_t) * width * height * 2);
+        memcpy(img, orig_img, sizeof(uint8_t) * width * height * 2);
+
         int bx=bd->getBall().x;
         int by=bd->getBall().y;
         int r=bd->getBall().r;
         for(float a=0;a<M_PI*2;a+=0.01){
-            int nx=bx+sin(a)*r;
-            int ny=by+cos(a)*r;
+            int nx=bx+std::sin(a)*r;
+            int ny=by+std::cos(a)*r;
             if(nx<0||ny<0||nx>=width||ny>=height)continue;
             setY(img,width,nx,ny,255);
         }
-    }
 
-    saveAsPng(img, width, height, name+"_balldetector.png");
-    free(img);
+        saveAsPng(img, width, height, name+"_balldetector.png");
+        free(img);
+    }
 }
 
 void drawCircle(const string &name, const uint8_t * const orig_img, RansacEllipseFitter *raf, RegionClassifier *rc, int width, int height){
@@ -390,6 +395,7 @@ void handleProgrammArguments(bpo::variables_map& varmap, int argc, char** argv) 
     options_all.add_options()
             ("help,h",                                              "Print this help")
             ("dir,d",          bpo::value<std::string>(),           "Process a directory of images")
+            ("whitelist",    bpo::value<std::string>(),           "Path to whitelist file for directory parsing.")
             ("image,i",        bpo::value<std::string>(),           "The image that should be processed")
             ("cycles,c",       bpo::value<int>()->default_value(10), "How often process a image with the vision.")
             ("resultImages,r", bpo::value<std::string>()->default_value(""), "Path for result images.")
@@ -403,7 +409,7 @@ void handleProgrammArguments(bpo::variables_map& varmap, int argc, char** argv) 
     if(varmap.count("image") == 0 && varmap.count("dir") == 0) { std::cout << options_all; exit(0); }
 }
 
-uint8_t* loadFile(const std::string& filename, float& pitch, float& roll) {
+uint8_t* loadFile(const std::string& filename, float& pitch, float& roll, float& headPitch, float& headYaw) {
     uint8_t *imageYUV422 = nullptr;
     size_t bufferSize = sizeof(uint8_t) * 2 * STD_WIDTH * STD_WIDTH;
 
@@ -418,25 +424,31 @@ uint8_t* loadFile(const std::string& filename, float& pitch, float& roll) {
     }
 
     PngImageProviderPtr pngImageProvider = getPngImageProviderInstace(STD_WIDTH, STD_HEIGHT);
-    pngImageProvider->loadAsYuv422(filename, imageYUV422, bufferSize, pitch, roll);
+    pngImageProvider->loadAsYuv422(filename, imageYUV422, bufferSize, pitch, roll, headPitch, headYaw);
 
     return imageYUV422;
 }
 
+void copyOriginal(const string &name, uint32_t width, uint32_t height, uint8_t* imageYUV422)
+{
+    saveAsPng(imageYUV422, width, height, name+"_original.png");
+}
+
 void writeDebugFiles(const string &name, uint32_t width, uint32_t height, uint8_t* imageYUV422, HTWKVision &vision)
 {
-//    drawFieldColor(name, imageYUV422, vision.fieldColorDetector, width, height);
-//    drawLineSegments(name, imageYUV422, vision.regionClassifier, width, height);
-//    drawScanLines(name, imageYUV422, vision.regionClassifier, width, height);
+//    copyOriginal(name, width, height, imageYUV422);
+    drawFieldColor(name, imageYUV422, vision.fieldColorDetector, width, height);
+    drawLineSegments(name, imageYUV422, vision.regionClassifier, width, height);
+    drawScanLines(name, imageYUV422, vision.regionClassifier, width, height);
     drawFieldBorder(name, imageYUV422, vision.fieldDetector, vision.regionClassifier, width, height);
-//    drawLines(name, imageYUV422, vision.lineDetector, width, height);
+    drawLines(name, imageYUV422, vision.lineDetector, width, height);
 //    drawGoalPosts(name, imageYUV422, vision.goalDetector, width, height);
-    drawRatingHypo(name,imageYUV422,vision.hypothesesGenerator, width, height);
-//    drawALLHypothesis(name,imageYUV422,vision.hypothesesGenerator, width, height);
-//    drawHypothesis(name,imageYUV422,vision.hypothesesGenerator, width, height);
+//    drawRatingHypo(name,imageYUV422,vision.hypothesesGenerator, width, height);
+    drawALLHypothesis(name,imageYUV422,vision.hypothesesGenerator, width, height);
+    drawHypothesis(name,imageYUV422,vision.hypothesesGenerator, width, height);
 //    drawHypothesis(name,imageYUV422,vision.robotAreaDetector, width, height);
 //    drawBall(name, imageYUV422, vision.ballDetector, width, height);
-//    drawCircle(name, imageYUV422, vision.ellipseFitter, vision.regionClassifier, width, height);
+    drawCircle(name, imageYUV422, vision.ellipseFitter, vision.regionClassifier, width, height);
 //    drawFeet(name, imageYUV422, vision.feetDetector, width, height);
 //    drawRobots(name, imageYUV422, vision.getRobotClassifierResult(), width, height);
 }
@@ -444,14 +456,18 @@ void writeDebugFiles(const string &name, uint32_t width, uint32_t height, uint8_
 void processOneFile(const std::string& filename, int processingCount, const std::string &debugPath) {
     float pitch=0;
     float roll=0;
-    uint8_t* imageYUV422 = loadFile(filename, pitch, roll);
+    float headPitch=0;
+    float headYaw=0;
+    uint8_t* imageYUV422 = loadFile(filename, pitch, roll, headPitch, headYaw);
 
     high_resolution_clock::time_point t1 = high_resolution_clock::now();
 
-    HTWKVision vision(STD_WIDTH, STD_HEIGHT, HtwkVisionConfig());
+    HtwkVisionConfig visionConfig;
+    visionConfig.isUpperCam = (filename.find("_U.") != std::string::npos);
+    HTWKVision vision(STD_WIDTH, STD_HEIGHT, visionConfig);
     vision.resetProfilingStats(true);
     for (int i=0;i<processingCount;i++) {
-        vision.proceed(imageYUV422, true, pitch, roll);
+        vision.proceed(imageYUV422, !visionConfig.isUpperCam, pitch, roll, headYaw);
     }
     vision.printProfilingResults(true);
 
@@ -471,6 +487,8 @@ struct ipr {
     uint8_t *img;
     float pitch;
     float roll;
+    float headPitch;
+    float headYaw;
     std::string name;
 };
 
@@ -488,8 +506,10 @@ void processDirectory(const std::string& path, int processingCount, const std::s
             ipr img;
             img.pitch=0;
             img.roll=0;
+            img.headPitch=0;
+            img.headYaw=0;
             img.name=filename;
-            img.img = loadFile(filename, img.pitch, img.roll);
+            img.img = loadFile(filename, img.pitch, img.roll, img.headPitch, img.headYaw);
 
             images.push_back(img);
         }
@@ -522,20 +542,24 @@ void processDirectory(const std::string& path, int processingCount, const std::s
 
         if(isUpper) {
             for (int i=0;i<processingCount;i++){
-                upperVision.proceed(img.img, false,img.pitch,img.roll);
+                upperVision.proceed(img.img, false,img.pitch,img.roll,img.headYaw);
             }
             if (writeTimeFile)
                 upperVision.writeProfilingFile(statsFileUpper,imgName);
         } else {
             for (int i=0;i<processingCount;i++){
-                lowerVision.proceed(img.img,true,img.pitch,img.roll);
+                lowerVision.proceed(img.img,true,img.pitch,img.roll,img.headYaw);
             }
             if (writeTimeFile)
                 lowerVision.writeProfilingFile(statsFileLower,imgName);
         }
 
         if (!debugPath.empty()) {
-            writeDebugFiles(debugPath+"/"+imgName, STD_WIDTH, STD_HEIGHT, img.img, upperVision);
+            if(isUpper) {
+                writeDebugFiles(debugPath+"/"+imgName, STD_WIDTH, STD_HEIGHT, img.img, upperVision);
+            }else{
+                writeDebugFiles(debugPath+"/"+imgName, STD_WIDTH, STD_HEIGHT, img.img, lowerVision);
+            }
         }
     }
     if(!writeTimeFile){
@@ -556,6 +580,54 @@ void processDirectory(const std::string& path, int processingCount, const std::s
     for (const ipr &img : images) { free(img.img); }
 }
 
+void processDirectoryWithWhitelist(const std::string& path, const std::set<string>& whitelist, const std::string &debugPath) {
+    const bf::recursive_directory_iterator end;
+
+    HtwkVisionConfig upperConfig;
+    HtwkVisionConfig lowerConfig;
+    lowerConfig.isUpperCam = false;
+
+    HTWKVision upperVision(STD_WIDTH, STD_HEIGHT, upperConfig);
+    HTWKVision lowerVision(STD_WIDTH, STD_HEIGHT, lowerConfig);
+
+    uint8_t *img;
+    float pitch, roll, headPitch, headYaw;
+
+    bf::path startPath(path);
+    for(auto it = bf::recursive_directory_iterator(startPath); it != end; ++it) {
+        std::string file = it->path().string();
+        std::string filename = it->path().filename().string();
+        if(!bf::is_regular_file(*it) || it->path().extension() != ".png" || whitelist.count(filename) == 0) {
+            continue;
+        }
+
+        std::cout << "Load " << filename << std::endl;
+        img = loadFile(file, pitch, roll, headPitch, headYaw);
+
+        bool isUpper = (filename.find("_U.") != std::string::npos);
+        HTWKVision& vision = isUpper ?  upperVision : lowerVision;
+        vision.proceed(img, false, pitch, roll, headYaw);
+
+        if (!debugPath.empty()) {
+            writeDebugFiles(debugPath+"/"+filename, STD_WIDTH, STD_HEIGHT, img, upperVision);
+        }
+
+        free(img);
+    }
+}
+
+std::set<std::string> readWhitelist(std::string whitelistFile) {
+    std::set<std::string> whitelist;
+
+    ifstream file(whitelistFile);
+    string line;
+    while(getline(file, line)){
+        whitelist.insert(line);
+    }
+
+    return whitelist;
+}
+
 int main(int argc, char **argv) {
     bpo::variables_map varmap;
     handleProgrammArguments(varmap, argc, argv);
@@ -564,11 +636,21 @@ int main(int argc, char **argv) {
     const bool writeTime =varmap["writeTimeFile"].as<bool>();
     string writeDebugFiles =   varmap["resultImages"].as<string>();
 
+    std::set<std::string> whitelist;
+
+    if(varmap.count("whitelist")) {
+        whitelist = readWhitelist(varmap["whitelist"].as<std::string>());
+    }
+
     if(varmap.count("image")) {
         std::string filename = varmap["image"].as<std::string>();
         processOneFile(filename, processingCount, writeDebugFiles);
     } else {
         std::string path = varmap["dir"].as<std::string>();
-        processDirectory(path, processingCount, writeDebugFiles, writeTime);
+        if(whitelist.empty()) {
+            processDirectory(path, processingCount, writeDebugFiles, writeTime);
+        } else {
+            processDirectoryWithWhitelist(path, whitelist, writeDebugFiles);
+        }
     }
 }

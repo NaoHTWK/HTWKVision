@@ -28,6 +28,7 @@
 #include "robot_classifier.h"
 #include "robot_detector.h"
 #include "hypotheses_generator_blocks.h"
+#include "obstacle_detection_lowcam.h"
 
 namespace htwk {
 
@@ -156,14 +157,15 @@ public:
     HypothesesGenerator*    hypothesesGenerator = nullptr;
     ObjectDetector*         objectDetector = nullptr;
     RobotDetector*          robotDetector  = nullptr;
+//    ObstacleDetectionLowCam*    obstacleDetectionLowCam = nullptr;
 
-    HTWKVision(int width, int height, HtwkVisionConfig  _config);
+    HTWKVision(int width, int height, const HtwkVisionConfig &_config);
     HTWKVision(HTWKVision& h) = delete;
     HTWKVision(HTWKVision&& h) = delete;
     HTWKVision& operator=(const HTWKVision&) = delete;
     ~HTWKVision();
 
-    void proceed(uint8_t *img, bool use_feet_detection, float pitch, float roll);
+    void proceed(uint8_t *img, bool use_feet_detection, float pitch, float roll, float headYaw);
 
     /**elements are in pixelcoordinates**/
     std::vector<RobotClassifierResult> getRobotClassifierResult() const { return resultRobotClassifier; }
@@ -171,7 +173,7 @@ public:
     void writeProfilingFile(const std::string& fileName, const std::string& imageName);
     void resetProfilingStats(bool isUpperCam);
 
-    HtwkVisionConfig& getHtwkVisionConfig() { return config; }
+    const HtwkVisionConfig& getHtwkVisionConfig() const { return config; }
 };
 
 }  // namespace htwk

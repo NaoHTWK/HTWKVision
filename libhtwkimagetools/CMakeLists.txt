@@ -23,12 +23,7 @@ set(FILES
 
     internal/htwkpngimagesaverlodepng.h
     internal/htwkpngimagesaverlodepng.cpp
-
-    ../3rdparty/liblodepng/lodepng.h
-    ../3rdparty/liblodepng/lodepng.cpp
 )
-
-include_directories(../3rdparty/liblodepng)
 
 if(PNG_FOUND)
 
@@ -48,7 +43,6 @@ else()
 endif()
 
 add_library(${PROJECT_NAME} SHARED ${FILES})
-target_link_libraries(${PROJECT_NAME} stdc++ png)
-target_include_directories(${PROJECT_NAME} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(${PROJECT_NAME} stdc++ png lodepng)
+target_include_directories(${PROJECT_NAME} PUBLIC .)
 
-install(TARGETS ${PROJECT_NAME} DESTINATION "lib")

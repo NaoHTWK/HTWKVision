@@ -21,9 +21,9 @@ PngImageProviderLibPng::PngImageProviderLibPng(const uint32_t expectedWidth, con
     }
 }
 
-bool PngImageProviderLibPng::loadAsYuv422(const std::string& filename, uint8_t* buffer, const size_t bufferSize, float& pitch, float& roll)
+bool PngImageProviderLibPng::loadAsYuv422(const std::string& filename, uint8_t* buffer, const size_t bufferSize, float& pitch, float& roll, float& headPitch, float& headYaw)
 {
-    if(tryToLoadCached(filename, buffer, bufferSize, pitch, roll))
+    if(tryToLoadCached(filename, buffer, bufferSize, pitch, roll, headPitch, headYaw))
         return true;
 
     int rc = 0;
@@ -94,6 +94,10 @@ bool PngImageProviderLibPng::loadAsYuv422(const std::string& filename, uint8_t* 
             pitch = std::stof(value);
         } else if(key == "roll") {
             roll = std::stof(value);
+        } else if(key == "headPitch") {
+            headPitch = std::stof(value);
+        } else if(key == "headYaw") {
+            headYaw = std::stof(value);
         }
     }
 
@@ -140,7 +144,7 @@ bool PngImageProviderLibPng::loadAsYuv422(const std::string& filename, uint8_t* 
     colorConversion.rgbaToYuv422(buffer, imageRGBA, expectedWidth, expectedHeight);
 
     if(cacheLoadedImages)
-        saveCachedImage(filename, buffer, bufferSize, pitch, roll);
+        saveCachedImage(filename, buffer, bufferSize, pitch, roll, headPitch, headYaw);
 
     return true;
 }

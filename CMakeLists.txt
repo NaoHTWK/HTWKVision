@@ -8,8 +8,7 @@ set(CMAKE_CXX_STANDARD 14)
 # To find FindCppUnit
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/cmake")
 
-find_package(Caffe REQUIRED)
-find_package(Boost COMPONENTS program_options signals system atomic REQUIRED)
+find_package(Caffe CONFIG)
 
 option(BUILD_DEMO_APP "Build the demo application which processes a PNG and shows what it detected." ON)
 option(BUILD_TESTS "Build the tests." OFF)
@@ -39,6 +38,8 @@ set(LIBS
     rt
     m
     pthread
+	Eigen
+    HTWKNeuronalNet
 )
 
 
@@ -49,27 +50,16 @@ endif()
 if(Caffe_FOUND)
     message("Caffe was found in ${Caffe_INCLUDE_DIRS}")
 
-    include_directories(${Caffe_INCLUDE_DIRS})
     set(LIBS ${LIBS} ${Caffe_LIBRARIES}) # ${OpenCV_LIBS})
     add_definitions(${Caffe_DEFINITIONS})
     message("LIBS ${LIBS}")
 endif()
 
-include_directories(
-  include
-)
+add_subdirectory(3rdparty/eigen)
+add_subdirectory(3rdparty/liblodepng)
+add_subdirectory(neuralnet)
 
 add_library(${PROJECT_NAME} SHARED
-  neuralnet/classifier.cpp
-  neuralnet/classifier.h
-  neuralnet/classifier_relu.cpp
-  neuralnet/classifier_relu.h
-  neuralnet/convolutions.cpp
-  neuralnet/convolutions.h
-  neuralnet/layer.h
-  neuralnet/layer_activations.h
-  neuralnet/pooling_result.h
-
   ball_detector.h
   ball_detector.cpp
   ball_detector_legacy.h
@@ -81,7 +71,6 @@ add_library(${PROJECT_NAME} SHARED
   ellifit.cpp
   ellifit.h
   ellipse.h
-  ext_math.h
   feet_detector.cpp
   feet_detector.h
   field_color_detector.cpp
@@ -118,6 +107,8 @@ add_library(${PROJECT_NAME} SHARED
   object_hypothesis.h
   object_detector.h
   object_detector.cpp
+  obstacle_detection_lowcam.h
+  obstacle_detection_lowcam.cpp
   projectionutil.h
   ransac_ellipse_fitter.cpp
   ransac_ellipse_fitter.h
@@ -135,16 +126,10 @@ add_library(${PROJECT_NAME} SHARED
 
 target_link_libraries(${PROJECT_NAME} ${LIBS})
 target_include_directories(${PROJECT_NAME}
-    PUBLIC
-        ${CMAKE_CURRENT_SOURCE_DIR}
-        ${CMAKE_CURRENT_SOURCE_DIR}/neuralnet
-        ${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/eigen
-        ${Caffe_INCLUDE_DIRS}
-        ..
-        ${CMAKE_CURRENT_SOURCE_DIR}/include
+    PUBLIC .
+    PRIVATE
+        include
 )
-
-install(TARGETS ${PROJECT_NAME} DESTINATION "lib")
 
 if(BUILD_TESTS)
     add_subdirectory(tests)

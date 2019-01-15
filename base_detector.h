@@ -5,7 +5,7 @@
 
 #include <cstdint>
 
-#include "color.h"
+#include <color.h>
 #include "range_check.h"
 
 namespace htwk {
