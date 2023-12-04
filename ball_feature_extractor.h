@@ -4,26 +4,25 @@
 #include "base_detector.h"
 #include "object_hypothesis.h"
 
-#include <functional>
-
 namespace htwk {
 
-class BallFeatureExtractor : public BaseDetector
-{
-private:
-    static constexpr float FEATURE_SCALE=1.7;
-    static constexpr int HIST_SIZE=256;
-
-    int getQ(int *hist, int size, float d);
-
-    void postprocessFeature(const int featureWidth, const int* cnt, int* cyValues, float* dest);
-
+class BallFeatureExtractor : public BaseDetector {
 public:
-    BallFeatureExtractor(const int _width, const int _height, const int8_t* _lutCb, const int8_t* _lutCr);
-    void getFeature(const ObjectHypothesis &p, const uint8_t *img, const int _featureSize, float* dest);
-    void getModifiedFeature(const ObjectHypothesis &p, const uint8_t *img, const int featureSize, float* dest, const bool mirrored, const float rotation);
+    using BaseDetector::BaseDetector;
+
+    void getFeature(const ObjectHypothesis& p, const uint8_t* img, int featureSize, float* dest);
+    void getFeatureYUV(const ObjectHypothesis& p, const uint8_t* img, const int featureSize, float* dest);
+    void getModifiedFeature(const ObjectHypothesis& p, const uint8_t* img, int featureSize, float* dest, bool mirrored,
+                            float rotation);
+
+private:
+    static constexpr float FEATURE_SCALE = 1.7f;
+    static constexpr int HIST_SIZE = 256;
+
+    int getQ(const std::vector<int>& hist, float d);
+    void postprocessFeature(std::vector<int>& cnt, std::vector<int>& cyValues, float* dest);
 };
 
-} // htwk
+}  // namespace htwk
 
-#endif // BALLFEATUREEXTRACTOR_H
+#endif  // BALLFEATUREEXTRACTOR_H

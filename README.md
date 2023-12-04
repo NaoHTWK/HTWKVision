@@ -17,23 +17,13 @@ data.
 
 The shared library can be easily integrated into you build system.
 
-It depends on Caffe. For execution on Nao v5 the optimized Caffe
-fork from https://github.com/tkalbitz/caffe is recommended.
+It has no external dependencies.
 
-The network weights for the object classifier are not part of this
-release.
-
-A code release of the full suite of tools to label images and train
-new object classifier nets is being prepared.
-
-Teams interested in our pre-trained nets may contact
-naohtwk@gmail.com for further information.
-
-A C++14 compatible compiler is needed to run the software.
+A C++11 compatible compiler is needed to run the software.
 
 ## LICENSE 
 
-Copyright (c) 2018 Nao-Team HTWK.  All rights reserved.
+Copyright (c) 2015 Nao-Team HTWK.  All rights reserved.
 
 Redistribution and use in source and binary forms, with or without 
 modification, are permitted provided that the following conditions 

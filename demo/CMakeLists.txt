@@ -1,22 +1,24 @@
-cmake_minimum_required (VERSION 2.6)
-
-# filesystem also needs system
-find_package(Boost 1.55 REQUIRED program_options filesystem system atomic)
-
-message("${Boost_LIBRARIES}")
+find_package(Boost COMPONENTS program_options filesystem system REQUIRED QUIET)
 
 add_executable(demo demo.cpp)
+add_executable(scaled_image_writer scaled_image_writer.cpp)
+
+#set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=address,undefined")
+#set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -fsanitize=address,undefined")
 
 target_link_libraries(
     demo
-    HTWKVision
-    htwkimagetools
-    HTWKNeuronalNet
-    ${Boost_LIBRARIES})
+    Vision
+    Boost::program_options
+    Boost::system
+    Boost::filesystem)
 
-if(NOT DEFINED NAO_HW_VERSION)
-    install(TARGETS demo DESTINATION ${CMAKE_SOURCE_DIR}/bin)
-    install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/../data/ DESTINATION ${CMAKE_SOURCE_DIR}/bin/data/)
-else()
-    install(TARGETS demo DESTINATION "${DEPLOY_DIR}/home")
-endif()
+target_link_libraries(
+    scaled_image_writer
+    Vision
+    Boost::program_options
+    Boost::system
+    Boost::filesystem)
+
+set_target_properties(demo PROPERTIES CXX_STANDARD 17)
+set_target_properties(scaled_image_writer PROPERTIES CXX_STANDARD 17)

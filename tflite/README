@@ -1,0 +1,4 @@
+Build is done with this command:
+CC=clang-12 CXX=clang-12 cmake -DCMAKE_C_FLAGS="-ffast-math -funsafe-math-optimizations -march=silvermont -mtune=silvermont" -DCMAKE_CXX_FLAGS="-ffast-math -funsafe-math-optimizations -march=silvermont -mtune=silvermont" -GNinja ../tensorflow/tensorflow/lite/ && ninja
+
+Please also update the c api headers.

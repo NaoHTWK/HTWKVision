@@ -1,33 +1,31 @@
 #ifndef __FIELD_COLOR_DETECTOR_H__
 #define __FIELD_COLOR_DETECTOR_H__
 
+#include <array>
 #include <cstdint>
-
 #include <vector>
 
 #include "base_detector.h"
 #include "color.h"
 #include "range_check.h"
 
-#define HIST_SIZE 25
-#define NUM_FEATURES 7
-
 namespace htwk {
 
 class FieldColorDetector : public BaseDetector {
 private:
+    static constexpr int NUM_FEATURES = 7;
 
-	int minCy2;
-	int maxCy2;
-	int minCb2;
-	int maxCb2;
-	int minCr2;
-	int maxCr2;
+    int minCy2{};
+    int maxCy2{};
+    int minCb2{};
+    int maxCb2{};
+    int minCr2{};
+    int maxCr2{};
 
-	int histY[256];
-	int histCb[256];
-	int histCr[256];
-	float features[NUM_FEATURES];
+    std::array<int, 256> histY{{0}};
+    std::array<int, 256> histCb{{0}};
+    std::array<int, 256> histCr{{0}};
+    float features[NUM_FEATURES]{};
 
 	static const int pixelSpacing;
 	static const int minFieldArea;
@@ -35,34 +33,37 @@ private:
 	static const float greenGain;
 	static const float thetas[62];
 
-	int greenCr;
-	int greenCb;
-	int greenCy;
-	int seedCr;
-	int seedCb;
-	int seedY;
+    int greenCr{};
+    int greenCb{};
+    int greenCy{};
+    int seedCr{};
+    int seedCb{};
+    int seedY{};
 
 public:
-    int minCy;
-    int maxCy;
-    int minCb;
-    int maxCb;
-    int minCr;
-    int maxCr;
+    int minCy{};
+    int maxCy{};
+    int minCb{};
+    int maxCb{};
+    int minCr{};
+    int maxCr{};
 
-    FieldColorDetector(int _width, int _height, int8_t *_lutCb, int8_t *_lutCr) __attribute__((nonnull));
-	~FieldColorDetector();
+    using BaseDetector::BaseDetector;
 
-	void proceed(const uint8_t * const img) __attribute__((nonnull));
-	void searchInitialSeed(const uint8_t * const img);
+    void proceed(const uint8_t* img) __attribute__((nonnull));
+    void searchInitialSeed(const uint8_t* img);
 	void setYCbCrCube(float* features);
-	void extractFeatures(const uint8_t * const img, float* features);
-	static int getStableMin(const int* const hist, int thres);
-	static int getPeak(const int* const hist);
+    void extractFeatures(const uint8_t* img, float* features);
+    static int getStableMin(const std::array<int, 256>& hist, int thres);
+    static int getPeak(const std::array<int, 256>& hist);
 
 	/**
 	 * Test, if a given yuv-color matches the field-color (used to detect all pixels on the carpet)
 	 */
+    inline bool maybeGreen(const color& c) const {
+        return maybeGreen(c.cy, c.cb, c.cr);
+    }
+
 	inline bool maybeGreen(int cyReal, int cbReal, int crReal) const {
 		if(crReal>maxCr2)return false; //44705
 		if(cyReal>maxCy2)return false; //30018
@@ -103,7 +104,7 @@ public:
 //   		return true;
        }
 
-    inline bool isGreen(color& c) const {
+    inline bool isGreen(const color& c) const {
     	if(c.cr>maxCr)return false; //44705
 		if(c.cy>maxCy)return false; //30018
 		if(c.cb>maxCb)return false; //7576
@@ -114,11 +115,7 @@ public:
     }
 
     color getColor() const {
-        color c;
-        c.cy=greenCy;
-        c.cb=greenCb;
-        c.cr=greenCr;
-        return c;
+        return {greenCy, greenCb, greenCr};
     }
 
 	void resetArrays();

@@ -11,13 +11,15 @@ private:
     int* integralImg;
 
 public:
-    static constexpr int SRC_IMAGE_WIDTH = 640;
-    static constexpr int SRC_IMAGE_HEIGHT = 480;
     static constexpr int INTEGRAL_SCALE = 2;//only 1,2 or 4
-    static constexpr int iWidth  = SRC_IMAGE_WIDTH/INTEGRAL_SCALE;
-    static constexpr int iHeight = SRC_IMAGE_HEIGHT/INTEGRAL_SCALE;
+    const int iWidth;
+    const int iHeight;
 
-    IntegralImage(int width, int height, int8_t *lutCb, int8_t *lutCr) __attribute__((nonnull));
+    IntegralImage(int8_t *lutCb, int8_t *lutCr, HtwkVisionConfig& config) __attribute__((nonnull));
+    IntegralImage(const IntegralImage&) = delete;
+    IntegralImage(IntegralImage&&) = delete;
+    IntegralImage& operator=(const IntegralImage&) = delete;
+    IntegralImage& operator=(IntegralImage&&) = delete;
     ~IntegralImage();
 
     inline int getIntegralValue(int x1, int y1, int x2, int y2) const {

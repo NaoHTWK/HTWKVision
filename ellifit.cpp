@@ -23,8 +23,8 @@ void elli_init() {
 }
 
 bool fit(vector<point_2d> points,float *result) {
-    vector<point_2d>::iterator newEndIt = unique(points.begin(), points.end());
-    points.resize(distance(points.begin(), newEndIt));
+    auto newEndIt = unique(points.begin(), points.end());
+    points.erase(newEndIt, points.end());
 
     int np = points.size();
     if (np < 6)

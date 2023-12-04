@@ -3,22 +3,17 @@
 #include <cstdlib>
 #include <iostream>
 #include <emmintrin.h>
-#include <ext_math.h>
+
+#include <easy/profiler.h>
 
 namespace htwk {
 
-IntegralImage::IntegralImage(int width, int height, int8_t *lutCb, int8_t *lutCr)
-: BaseDetector(width, height, lutCb, lutCr)
-{
-    if(posix_memalign((void**)&integralImg, 16, iWidth*iHeight*sizeof(int)) != 0) {
-        printf("Error: Couldn't allocate aligned memory for integral image of the ball detector. %s %d\n", __FILE__, __LINE__);
-        fflush(stdout);
-        exit(1);
-    }
+IntegralImage::IntegralImage(int8_t *lutCb, int8_t *lutCr, HtwkVisionConfig &config)
+: BaseDetector(lutCb, lutCr, config), iWidth(config.width / INTEGRAL_SCALE), iHeight(config.height / INTEGRAL_SCALE) {
+    integralImg = static_cast<int*>(aligned_alloc(16, iWidth*iHeight*sizeof(int)));
 }
 
-IntegralImage::~IntegralImage()
-{
+IntegralImage::~IntegralImage() {
     free(integralImg);
 }
 
@@ -27,6 +22,9 @@ IntegralImage::~IntegralImage()
 //#define getValue(img, x, y) getCr((img), (x), (y))
 
 void IntegralImage::proceed(uint8_t *img) const {
+    Timer t("IntegralImage", 50);
+    EASY_FUNCTION(profiler::colors::Red100);
+
     integralImg[0]=getValue(img,0,0);
     for(int x=1;x<iWidth;x++){
         integralImg[x]=integralImg[x-1]+(getValue(img,x*INTEGRAL_SCALE,0));
@@ -37,6 +35,9 @@ void IntegralImage::proceed(uint8_t *img) const {
         const int factor = 4;
         __m128i y_mask = _mm_set1_epi32(0xff);
         __m128i v_mask = _mm_set1_epi32(0xff000000);
+        //TODO: Below is how it should be,  test whether it works better.
+        //__m128i y_mask = _mm_set_epi32(0xff, 0xff, 0xff, 0xff);
+        //__m128i v_mask = _mm_set_epi32(0xff000000, 0xff000000, 0xff000000, 0xff000000);
         __m128i fff0 = _mm_setr_epi32(-1, -1, -1, 0);
         for(int y=1;y<iHeight;y++){
             __m128i sum=_mm_set1_epi32(0);

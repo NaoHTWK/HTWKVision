@@ -1,182 +1,135 @@
 #ifndef HTWK_VISION_H
 #define HTWK_VISION_H
 
-#include <ctime>
-#include <vector>
-#include <cstdint>
-#include <cstdlib>
-#include <cstdio>
-#include <iostream>
-#include <fstream>
+#include <async.h>
+#include <ball_classifier_upper_cam.h>
+#include <ball_detector.h>
+#include <ball_feature_extractor.h>
+#include <ball_pre_classifier_upper_cam.h>
+#include <field_border_detector.h>
+#include <field_color_detector.h>
+#include <htwk_vision_config.h>
+#include <hypotheses_generator.h>
+#include <image_preprocessor.h>
+#include <integral_image.h>
+#include <jersey_detection.h>
+#include <lc_centercirclepoints_detector.h>
+#include <lc_obstacle_detection.h>
+#include <lc_scrambled_camera_detector.h>
+#include <line_detector.h>
+#include <localization_utils.h>
+#include <object_detector_lowercam.h>
+#include <object_detector_lowercam_hyp_gen.h>
+#include <penaltyspot_detector.h>
+#include <ransac_ellipse_fitter.h>
+#include <region_classifier.h>
+#include <uc_ball_hyp_gen.h>
+#include <uc_centercirclepoints_detector.h>
+#include <uc_goalpost_detector.h>
+#include <uc_penaltyspot_classifier.h>
+#include <uc_robot_detector.h>
+#include <uc_dirty_camera_detector.h>
 
-#include "ball_detector.h"
-#include "ball_detector_legacy.h"
-#include "ball_feature_extractor.h"
-#include "field_color_detector.h"
-#include "feet_detector.h"
-#include "field_detector.h"
-#include "goal_detector.h"
-#include "htwk_vision_config.h"
-#include "integral_image.h"
-#include "jersey_color_detector.h"
-#include "line_detector.h"
-#include "near_obstacle_detector.h"
-#include "object_detector.h"
-#include "ransac_ellipse_fitter.h"
-#include "region_classifier.h"
-#include "robot_area_detector.h"
-#include "robot_classifier.h"
-#include "robot_detector.h"
-#include "hypotheses_generator_blocks.h"
-#include "obstacle_detection_lowcam.h"
+#include <cstdint>
+#include <cstdio>
+#include <cstdlib>
+#include <ctime>
+#include <fstream>
+#include <iostream>
+#include <memory>
+#include <vector>
 
 namespace htwk {
+
+class ImageDebugHelper;
 
 /**
  * This module recognizes robocup specific objects in an image with 'width' * 'height' pixels in yuv422 format.
  * Recognition Overview:
  * FieldColorDetector     : detects the yCbCr color of the playing field in the image
- * FieldDetector          : decides which pixels belonging to the playing-field by modelling the fieldborder with up to two lines
- * RegionClassifier       : scans the image with vertical and horizontal scanlines and divides it into homogeneous scanline-segments
- *                          and classifies every region into 'carpet-green', 'line-white' or 'other'
- * GoalDetector           : detects goal posts in the image
+ * FieldBorderDetector    : decides which pixels belonging to the playing-field by modelling the fieldborder with up to
+ *                          two lines
+ * RegionClassifier       : scans the image with vertical and horizontal scanlines and divides it into
+ *                          homogeneous scanline-segments and classifies every region into 'carpet-green', 'line-white'
+ *                          or 'other'
  * LineDetector           : scans image for lines (straight groups of line segments from the RegionClassifier)
  * BallDetector           : detects the ball (if visible) and outputs its position
- * FeetDetector           : detects the own feets (if visible) and returns the position between the toes
- * JersyColorDetector     : detects the color of the given robot
  * RansacEllipseFitter    : trys to find an ellipse in the image
  * VisionDebugger         : used for visualising the recognition results (writes directly into the camera-image)
- * RobotAreaDetector      : detects possible rects in the image, where a other robot could be
- * RobotClassifier        : classifies every detected possible robot-rect to decide, if it is really a robot (to prevent false positives)
- * NearObstableDetector   : find obstacles
  */
 class HTWKVision {
 private:
-    int8_t *lutCb = nullptr;
-    int8_t *lutCr = nullptr;
-    const int width;
-//    int height;
+    int8_t* lutCb = nullptr;
+    int8_t* lutCr = nullptr;
     void createAdressLookups();
-    std::vector<RobotClassifierResult> resultRobotClassifier;
-
-    static constexpr bool enableProfiling = false;
-    void createProfilingStats();
-
-    inline void getTime(timespec& t) { clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &t); }
-    inline void writeProfilHeader(const std::string& fileName);
-    inline void writeData(std::ofstream &file, const std::string& sep, float min, float avg, float max){
-        file << min << sep << avg << sep << max << sep;
-    }
-    inline void writeHead(std::ofstream &file, const std::string& sep, const std::string& name){
-        file << sep << name << sep << sep;
-    }
-
-    timespec tFieldColorDetector;
-    timespec tRegionClassifier;
-    timespec tFieldDetector;
-    timespec tLineDetector;
-    timespec tGoalDetector;
-    timespec tHypoGenerator;
-    timespec tBallDetector;
-    timespec tFeetDetector;
-    timespec tNearObstacleDetector;
-    timespec tEllipseFitter;
-    timespec tRobotHypotheses;
-    timespec tRobotClassifier;
-    timespec tJersey;
-    timespec tIntegralImage;
-    timespec tEnd;
-
-    float cntFieldColorDetector = 0;
-    float cntRegionClassifier = 0;
-    float cntFieldDetector = 0;
-    float cntLineDetector = 0;
-    float cntGoalDetector = 0;
-    float cntHypoGenerator = 0;
-    float cntBallDetector = 0;
-    float cntFeetDetector = 0;
-    float cntNearObstacleDetector = 0;
-    float cntEllipseFitter = 0;
-    float cntRobotHypotheses = 0;
-    float cntRobotClassifier = 0;
-    float cntJersey = 0;
-    float cntCreateIntegralImage = 0;
-    float cntTotal = 0;
-
-    float maxFieldColorDetector = 0;
-    float maxRegionClassifier = 0;
-    float maxFieldDetector = 0;
-    float maxLineDetector = 0;
-    float maxGoalDetector = 0;
-    float maxHypoGenerator = 0;
-    float maxBallDetector = 0;
-    float maxFeetDetector = 0;
-    float maxNearObstacleDetector = 0;
-    float maxEllipseFitter = 0;
-    float maxRobotHypotheses = 0;
-    float maxRobotClassifier = 0;
-    float maxJersey = 0;
-    float maxCreateIntegralImage = 0;
-    float maxTotal = 0;
-
-    float minFieldColorDetector = 0;
-    float minRegionClassifier = 0;
-    float minFieldDetector = 0;
-    float minLineDetector = 0;
-    float minGoalDetector = 0;
-    float minHypoGenerator = 0;
-    float minBallDetector = 0;
-    float minFeetDetector = 0;
-    float minNearObstacleDetector = 0;
-    float minEllipseFitter = 0;
-    float minRobotHypotheses = 0;
-    float minRobotClassifier = 0;
-    float minJersey = 0;
-    float minCreateIntegralImage = 0;
-    float minTotal = 0;
-
-    int cntImage = 0;
 
     HtwkVisionConfig config;
+    ThreadPool* thread_pool;
+
+    std::vector<float> stuckCameraReferenceImage;
 
 public:
-    FieldColorDetector *    fieldColorDetector = nullptr;
-    FieldDetector *         fieldDetector = nullptr;
-    RegionClassifier*       regionClassifier = nullptr;
-    LineDetector*           lineDetector = nullptr;
-    GoalDetector*           goalDetector = nullptr;
-    BallFeatureExtractor*   ballFeatureExtractor = nullptr;
-    BallDetector*           ballDetector = nullptr;
-    RansacEllipseFitter*    ellipseFitter = nullptr;
-    FeetDetector*           feetDetector = nullptr;
-    RobotAreaDetector*      robotAreaDetector = nullptr;
-    RobotClassifier*        robotClassifier = nullptr;
-    NearObstacleDetector*   nearObstacleDetector = nullptr;
-    JerseyColorDetector*    jerseyColorDetector = nullptr;
-    IntegralImage*          integralImage = nullptr;
-    HypothesesGenerator*    hypothesesGenerator = nullptr;
-    ObjectDetector*         objectDetector = nullptr;
-    RobotDetector*          robotDetector  = nullptr;
-//    ObstacleDetectionLowCam*    obstacleDetectionLowCam = nullptr;
+    FieldColorDetector* fieldColorDetector = nullptr;
+    std::shared_ptr<FieldBorderDetector> fieldBorderDetector = nullptr;
+    RegionClassifier* regionClassifier = nullptr;
+    LineDetector* lineDetector = nullptr;
+    RansacEllipseFitter* ellipseFitter = nullptr;
+    IntegralImage* integralImage = nullptr;
+    HypothesesGenerator* hypothesesGenerator = nullptr;
+    LowerCamObstacleDetection* obstacleDetectionLowCam = nullptr;
 
-    HTWKVision(int width, int height, const HtwkVisionConfig &_config);
+    BallFeatureExtractor* ballFeatureExtractor = nullptr;
+
+    std::shared_ptr<ImagePreprocessor> ucBallHypImagePreprocessor;
+    std::shared_ptr<UpperCamBallHypothesesGenerator> ucBallHypGenerator;
+
+    std::shared_ptr<ImagePreprocessor> ucImagePreprocessor;
+    std::shared_ptr<UpperCamGoalPostDetector> ucGoalPostDetector;
+    std::shared_ptr<UpperCamCenterCirclePointDetector> ucCenterCirclePointDetector;
+    std::shared_ptr<LowerCamCenterCirclePointDetector> lcCenterCirclePointDetectorCenter;
+    std::shared_ptr<LowerCamCenterCirclePointDetector> lcCenterCirclePointDetectorSide;
+    std::shared_ptr<UpperCamRobotDetector> ucRobotDetector;
+    std::shared_ptr<UpperCamDirtyCameraDetector> ucDirtyCameraDetector;
+    std::shared_ptr<LowerCameraScrambledCameraDetector> lcScrambledCameraDetector;
+
+    std::shared_ptr<BallPreClassifierUpperCam> ballDetectorUpperCamPreClassifier;
+    std::shared_ptr<BallClassifierUpperCam> ballDetectorUpperCamPostClassifier;
+    std::shared_ptr<UpperCamPenaltySpotClassifier> ucPenaltySpotClassifier;
+    std::shared_ptr<ObjectDetectorLowCam> objectDetectorLowerCam;
+
+    std::shared_ptr<ImagePreprocessor> lcImagePreprocessor;
+    std::shared_ptr<ObjectDetectorLowCamHypGen> lcHypGenBall;
+    std::shared_ptr<ObjectDetectorLowCamHypGen> lcHypGenPenaltySpot;
+
+    std::shared_ptr<BallDetector> ballDetector;
+    std::shared_ptr<PenaltySpotDetector> penaltySpotDetector;
+    std::shared_ptr<JerseyDetection> jerseyDetection;
+
+    HTWKVision(HtwkVisionConfig &cfg, ThreadPool* thread_pool);
     HTWKVision(HTWKVision& h) = delete;
     HTWKVision(HTWKVision&& h) = delete;
     HTWKVision& operator=(const HTWKVision&) = delete;
+    HTWKVision& operator=(HTWKVision&&) = delete;
     ~HTWKVision();
 
-    void proceed(uint8_t *img, bool use_feet_detection, float pitch, float roll, float headYaw);
+    void proceed(uint8_t* img, CamPose& cam_pose, bool ultra_low_latency = false);
 
-    /**elements are in pixelcoordinates**/
-    std::vector<RobotClassifierResult> getRobotClassifierResult() const { return resultRobotClassifier; }
-    void printProfilingResults(bool isUpperCam);
-    void writeProfilingFile(const std::string& fileName, const std::string& imageName);
-    void resetProfilingStats(bool isUpperCam);
+    std::optional<ObjectHypothesis> getPenaltySpot() const;
+    std::optional<ObjectHypothesis> getBall() const;
 
-    const HtwkVisionConfig& getHtwkVisionConfig() const { return config; }
+    const HtwkVisionConfig& getHtwkVisionConfig() const {
+        return config;
+    }
+    const int8_t* getLutCb() {
+        return lutCb;
+    }
+    const int8_t* getLutCr() {
+        return lutCr;
+    }
+
+    bool isCameraStuck();
 };
 
 }  // namespace htwk
 
 #endif  // HTWK_VISION_H
-

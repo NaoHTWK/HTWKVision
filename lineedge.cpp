@@ -34,9 +34,6 @@ LineEdge::LineEdge(){
     valid=false;
 }
 
-LineEdge::~LineEdge() {
-}
-
 void LineEdge::update(){
 	x=0;
 	y=0;
@@ -121,7 +118,7 @@ void LineEdge::update(){
 	valid=true;
 }
 
-float LineEdge::estimateLineWidth(){
+float LineEdge::estimateLineWidth() const {
 	if(segments.empty())return 0;
 	float lineWidth=0;
 	float minDist=9999;

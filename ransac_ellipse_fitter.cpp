@@ -1,24 +1,44 @@
 #include "ransac_ellipse_fitter.h"
 
+#include <algorithm>
 #include <cstring>
 
+#include <easy/profiler.h>
+
 #include "ellifit.h"
+#include <robotoption.h>
+#include <visualizer.h>
 
 using namespace std;
+using namespace NaoControl;
 
 namespace htwk {
 
-const float RansacEllipseFitter::minRating=0.35f;
-const int RansacEllipseFitter::angleCnt=36;
+float RansacEllipseFitter::minRating=0.35f;
+int RansacEllipseFitter::angleCnt=20;
+int RansacEllipseFitter::minCurvedSegments = 20;
+int RansacEllipseFitter::minIterationTries = 100;
 
-RansacEllipseFitter::RansacEllipseFitter() : ellipseFound(false),
-        camPitch(0), camRoll(0) {
+RansacEllipseFitter::RansacEllipseFitter(const int8_t *lutCb, const int8_t *lutCr, HtwkVisionConfig &config)
+    : BaseDetector(lutCb, lutCr, config) {
+
+    if(config.activate_visualization) {
+        std::string name = std::string("HTWK/Vision/RansacEllipseFitter/") + (config.isUpperCam ? "Upper" : "Lower");
+
+        auto* options = new OptionSet(name.c_str());
+        options->addOption(new NaoControl::IntOption("angleCnt", &angleCnt, 0, 100, 1));
+        options->addOption(new NaoControl::IntOption("minIterationTries", &minIterationTries, 1, 100, 1));
+        options->addOption(new NaoControl::IntOption("minCurvedSegments", &minCurvedSegments, 6, 100, 1));
+        options->addOption(new NaoControl::FloatOption("minRating", &minRating, 0.f, 1.f, .01f));
+        options->addOption(new NaoControl::FloatOption("minDistanceFromEllipse", &minDistanceFromEllipse, 0.f, 1.f, .01f));
+        NaoControl::RobotOption::instance().addOptionSet(options);
+    }
 }
 
-RansacEllipseFitter::~RansacEllipseFitter(){
-}
+void RansacEllipseFitter::proceed(const vector<LineSegment*> &lineEdgeSegments, uint8_t* image){
+    Timer t("RansacEllipseFitter", 50);
+    EASY_FUNCTION(profiler::colors::Orange100);
 
-void RansacEllipseFitter::proceed(const vector<LineSegment*> &lineEdgeSegments){
     ellipseFound=false;
     vector<LineSegment*> curveSegments;
     vector<LineSegment*> curveSegmentsFiltered;
@@ -36,8 +56,36 @@ void RansacEllipseFitter::proceed(const vector<LineSegment*> &lineEdgeSegments){
             }
         }
     }
+
+    abortState = 0;
     float ellipse[6];
-    float rating=ransacFit(curveSegmentsFiltered,curveSegments,ellipse,15,20);
+    float iterMaxRating = 0;
+    float rating=ransacFit(curveSegmentsFiltered,curveSegments,ellipse,minIterationTries,minCurvedSegments,image,iterMaxRating);
+
+//    for (const LineSegment *ls : curveSegmentsFiltered) {
+//        if (ls->x < 0 || ls->x >= 640 || ls->y < 0 || ls->y >= 480)
+//            continue;
+//        for (float d = 0; d <= 5; d += 0.1) {
+//            int px = (int)(ls->x + ls->vx * d);
+//            int py = (int)(ls->y + ls->vy * d);
+//            if (px < 0 || py < 0 || px >= 640 || py >= 480)
+//                continue;
+//            setY(image, px, py, 255);
+//        }
+//        setY(image, ls->x, ls->y, 0);
+//    }
+
+
+    if(config.activate_visualization) {
+        VisTransPtr ptr = Visualizer::instance().startTransaction({}, "RansacEllipseFitter", RELATIVE_BODY, REPLACE);
+        ptr->addParameter(Parameter::createInt("Abort State", abortState));
+        ptr->addParameter(Parameter::createInt("Curved Segment Count", (int)curveSegments.size()));
+        ptr->addParameter(Parameter::createInt("Detected (w/LS)", sucessfullDetectionWithAdditionLineSegments));
+        ptr->addParameter(Parameter::createInt("Detected (wo/LS)", sucessfullDetectionWithoutAdditionalLineSigments));
+        ptr->addParameter(Parameter::createFloat("Max Rating", iterMaxRating));
+        Visualizer::instance().commit(ptr);
+    }
+
     resultEllipse=Ellipse(ellipse);
     if(rating>minRating&&transformEl(resultEllipse)==0){
         ellipseFound=true;
@@ -64,7 +112,10 @@ float RansacEllipseFitter::getRating(const vector<LineSegment*> &carryover, cons
         float px=point.x/e.ta;
         float py=point.y/e.tb;
         float dist=px*px+py*py;
-        if(dist>1.1f*1.1f||dist<0.9f*0.9f){
+
+        float distanceFromEllipse = fabs(1-dist);
+
+        if(distanceFromEllipse > minDistanceFromEllipse){
             continue;
         }
         float angle=atan2(py,px)+M_PI;
@@ -74,7 +125,7 @@ float RansacEllipseFitter::getRating(const vector<LineSegment*> &carryover, cons
     float rating=0;
     for(int angle=0;angle<angleCnt/2;angle++){
         if(histo[angle]>0&&histo[angle+angleCnt/2]>0){
-            rating+=100+histo[angle];
+            rating+=100+histo[angle]+histo[angle+angleCnt/2];
         }
     }
     rating/=100.f*angleCnt/2;
@@ -84,27 +135,31 @@ float RansacEllipseFitter::getRating(const vector<LineSegment*> &carryover, cons
 
 float RansacEllipseFitter::ransacFit(const vector<LineSegment*> &carryover,
                                      const vector<LineSegment*> &lineEdgeSegments, float ellipse[6],
-                                     int iter, unsigned int minMatches){
+                                     int iter, unsigned int minMatches, uint8_t* image, float& iterMaxRating){
     if(carryover.size()<minMatches){
         for(int j=0;j<6;j++){
             ellipse[j]=0;
         }
+        abortState = 1;
         return 0;
     }
 
     elli_init();
     float tmpEllipse[6];
+    float bestEllTmp[6];
     bool foundBest=false;
     Ellipse bestEll;
-    float radius=3;
     float max=minRating;
     //RANSAC iterations
     for(int i=0;i<iter;i++){
 
         //get 6 random LineSegments o construct an ellipse
+        std::vector<LineSegment*> out;
+        std::sample(carryover.begin(), carryover.end(), std::back_inserter(out), 6, rng);
+
         vector<point_2d> tmp;
         for(int j=0;j<6;j++){
-            LineSegment *ls=carryover[(int)(dist(rng)*carryover.size())];
+            LineSegment *ls=out[j];
             point_2d p=point_2d(ls->x,ls->y);
             tmp.push_back(p);
         }
@@ -113,10 +168,16 @@ float RansacEllipseFitter::ransacFit(const vector<LineSegment*> &carryover,
             Ellipse e(tmpEllipse);
             if(transformEl(e)==0){
                 float rating=getRating(lineEdgeSegments,e);
+                if(rating>iterMaxRating){
+                    iterMaxRating=rating;
+                }
                 if(rating>max){
                     max=rating;
                     bestEll=e;
                     foundBest=true;
+                    for(int j=0;j<6;j++){
+                        bestEllTmp[j]=tmpEllipse[j];
+                    }
                 }
             }
         }
@@ -125,10 +186,12 @@ float RansacEllipseFitter::ransacFit(const vector<LineSegment*> &carryover,
         for(int j=0;j<6;j++){
             ellipse[j]=0;
         }
+        abortState = 2;
         return 0;
     }
 
     //get consensus-set
+    float radius=3;
     vector<point_2d> bestSet;
     for(const LineSegment *p : lineEdgeSegments){
         float dist=getEllDist(p->x,p->y,bestEll);
@@ -144,6 +207,7 @@ float RansacEllipseFitter::ransacFit(const vector<LineSegment*> &carryover,
             for(int j=0;j<6;j++){
                 ellipse[j]=0;
             }
+            abortState = 3;
             return 0;
         }
 
@@ -154,22 +218,30 @@ float RansacEllipseFitter::ransacFit(const vector<LineSegment*> &carryover,
             for(int j=0;j<6;j++){
                 ellipse[j]=0;
             }
+            abortState = 4;
             return 0;
         }
         for(int j=0;j<6;j++){
             ellipse[j]=tmpEllipse[j];
         }
+
+        sucessfullDetectionWithAdditionLineSegments++;
         return finalRating;
     }else{
         for(int j=0;j<6;j++){
-            ellipse[j]=0;
+            ellipse[j]=bestEllTmp[j];
         }
-        return 0;
+
+        abortState = 5;
+        sucessfullDetectionWithoutAdditionalLineSigments++;
+        return max;
     }
 
+    abortState = 99;
+    return max;
 }
 
-void RansacEllipseFitter::eigenvectors(float a, float b, float eva[2],float eve[][2]){
+void RansacEllipseFitter::eigenvectors(float a, float b, const float eva[2],float eve[][2]){
     float l;
 
     //ev1

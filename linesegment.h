@@ -9,8 +9,10 @@
 namespace htwk {
 class LineSegment {
 public:
-  LineSegment(LineSegment &l) = delete;
-  void operator=(LineSegment const &) = delete;
+  LineSegment(const LineSegment& l) = delete;
+  LineSegment(LineSegment&& l) = delete;
+  LineSegment& operator=(const LineSegment&) = delete;
+  LineSegment& operator=(LineSegment&&) = delete;
 
   int x, y;
   float vx, vy;
@@ -20,29 +22,18 @@ public:
   // Datenstrukturen, um zusammengehÃ¶rige Liniensegmente zu gruppieren
 
   std::vector<LineSegment *> neighbors;
-  LineSegment *bestNeighbor;
-  LineSegment *pred;
-  LineSegment *link;
-  LineEdge *parentLine;
-  float minError;
+  LineSegment *bestNeighbor {nullptr};
+  LineSegment *pred {nullptr};
+  LineSegment *link {nullptr};
+  LineEdge *parentLine {nullptr};
+  float minError {std::numeric_limits<float>::max()};
 
-  LineEdge *edge1;
-  LineEdge *edge2;
+  LineEdge *edge1 {nullptr};
+  LineEdge *edge2 {nullptr};
 
-  LineSegment(int x, int y, float vecX, float vecY) {
-    this->x = x;
-    this->y = y;
-    this->vx = vecX;
-    this->vy = vecY;
-    this->bestNeighbor = nullptr;
-    this->parentLine = nullptr;
-    this->id = 0;
-    this->link = nullptr;
-    pred = nullptr;
-    minError = std::numeric_limits<float>::max();
-    edge1 = edge2 = nullptr;
-  }
-  ~LineSegment() {}
+  LineSegment(int x, int y, float vecX, float vecY)
+      : x(x), y(y), vx(vecX), vy(vecY), id(0) {}
+  ~LineSegment() = default;
 };
 
 }  // namespace htwk

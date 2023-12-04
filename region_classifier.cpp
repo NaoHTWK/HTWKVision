@@ -1,28 +1,42 @@
 #include "region_classifier.h"
 
-#include "ext_math.h"
+#include <easy/profiler.h>
 
-using namespace ext_math;
+#include <robotoption.h>
+#include <stl_ext.h>
+
 using namespace std;
+using namespace NaoControl;
 
 namespace htwk {
 
 // between 8 for Tape-Lines and up to 32 for artificial grass
+#ifdef WEBOTS
+int RegionClassifier::tEdge = 32;  // minimal edge-intensity
+#else
 int RegionClassifier::tEdge = 20;  // minimal edge-intensity
+#endif
 
-int RegionClassifier::maxEdgesInLine =
-        3;  // because of multiple edges in one lineregion
-
+int RegionClassifier::maxEdgesInLine = 2;  // because of multiple edges in one lineregion
+int RegionClassifier::greenRegionColorDist =674;
 int RegionClassifier::maxLineBorder = 6;  // maximal distance (px) between
 // line-border and the green
 // neighbor-regions
 
-RegionClassifier::RegionClassifier(int width, int height, bool isUpperCam, int8_t *lutCb, int8_t *lutCr)
-    : BaseDetector(width, height, lutCb, lutCr)
-    , lineSpacing(isUpperCam ? 16 : 32)
-{
+RegionClassifier::RegionClassifier(int8_t *lutCb, int8_t *lutCr, HtwkVisionConfig &config)
+    : BaseDetector(lutCb, lutCr, config),
+      pattern{0},
+      upperCam(config.isUpperCam),
+      lineSpacing(config.isUpperCam ? 12 : 10) {
     lineRegionsCnt = 0;
-    lineSegments = new vector<LineSegment *>();
+
+#ifndef WEBOTS
+    // Parameter for Bankok please adjust at own discretion
+    if (config.isUpperCam)
+        tEdge = 10;
+    else
+        tEdge = 19;
+#endif
 
     scanVertical = new Scanline[width / lineSpacing];
     scanHorizontal = new Scanline[height / lineSpacing];
@@ -38,21 +52,27 @@ RegionClassifier::RegionClassifier(int width, int height, bool isUpperCam, int8_
         scanHorizontal[i].vy = 0;
         scanHorizontal[i].edgeCnt = 0;
     }
+
+    if(config.activate_visualization) {
+        std::string name = std::string("HTWK/Vision/RegionClassifier/") + (config.isUpperCam ? "Upper" : "Lower");
+        auto* options = new OptionSet(name.c_str());
+        options->addOption(new NaoControl::IntOption("tEdge", &tEdge, 0, 100, 1));
+        options->addOption(new NaoControl::IntOption("maxEdgesInLine", &maxEdgesInLine, 0, 20, 1));
+        options->addOption(new NaoControl::IntOption("greenRegionColorDist", &greenRegionColorDist, 0, 1000, 1));
+        options->addOption(new NaoControl::IntOption("maxLineBorder", &maxLineBorder, 0, 100, 1));
+        NaoControl::RobotOption::instance().addOptionSet(options);
+    }
 }
 
 RegionClassifier::~RegionClassifier() {
-
-    for (LineSegment *ls : *lineSegments) {
-        delete ls;
-    }
-    lineSegments->clear();
-
-    delete  lineSegments;
-    delete [] scanVertical;
-    delete [] scanHorizontal;
+    delete[] scanVertical;
+    delete[] scanHorizontal;
 }
 
 void RegionClassifier::proceed(uint8_t *img, FieldColorDetector *field) {
+    Timer t("RegionClassifier", 50);
+    EASY_FUNCTION(profiler::colors::Cyan100);
+
     // reset scanlines
     for (int i = 0; i < width / lineSpacing; i++) {
         scanVertical[i].edgeCnt = 0;
@@ -61,6 +81,7 @@ void RegionClassifier::proceed(uint8_t *img, FieldColorDetector *field) {
         scanHorizontal[i].edgeCnt = 0;
     }
 
+    EASY_BLOCK("Scan Vertical");
     int offset = lineSpacing / 2;
     for (int x = offset; x < width; x += lineSpacing) {
         Scanline *sl = &scanVertical[x / lineSpacing];
@@ -69,19 +90,24 @@ void RegionClassifier::proceed(uint8_t *img, FieldColorDetector *field) {
         addEdge(img, sl, x, height - 2, -1, false);
 
         // find edges on vertical scanlines
-        scan(img, x, height - 2, field, sl);
+        if (upperCam)
+            scan(img, x, height - 2, field, sl);
+        else
+            scan_avg_y(img, x, height - 2, field, sl);
 
         // add last edge (field-border)
         addEdge(img, sl, x, 0, 1, false);
 
         // get region color-values
-        getColorsFromRegions(img, sl, (int)ext_math::sgn(sl->vx), (int)ext_math::sgn(sl->vy));
+        getColorsFromRegions(img, sl, (int)sgn(sl->vx), (int)sgn(sl->vy));
 
         // classify
         classifyGreenRegions(sl, field);
         classifyWhiteRegions(sl);
     }
+    EASY_END_BLOCK;
 
+    EASY_BLOCK("Scan Horizontal");
     for (int y = offset; y < height; y += lineSpacing) {
         Scanline *sl = &scanHorizontal[y / lineSpacing];
 
@@ -89,57 +115,62 @@ void RegionClassifier::proceed(uint8_t *img, FieldColorDetector *field) {
         if ((y / lineSpacing) % 2 == 0) {
             sl->vx = -2;
             addEdge(img, sl, width - 1, y, -1, false);
-            scan(img, width - 1, y, field, sl);
+            if (upperCam)
+                scan(img, width - 1, y, field, sl);
+            else
+                scan_avg_x(img, width - 1, y, field, sl);
             addEdge(img, sl, 0, y, 1, false);
         } else {
             addEdge(img, sl, 0, y, -1, false);
-            scan(img, 0, y, field, sl);
+            if (upperCam)
+                scan(img, 0, y, field, sl);
+            else
+                scan_avg_x(img, 0, y, field, sl);
             addEdge(img, sl, width - 1, y, 1, false);
         }
 
         // get region color-values
-        getColorsFromRegions(img, sl, (int)ext_math::sgn(sl->vx), (int)ext_math::sgn(sl->vy));
+        getColorsFromRegions(img, sl, (int)sgn(sl->vx), (int)sgn(sl->vy));
 
         // classify
         classifyGreenRegions(sl, field);
         classifyWhiteRegions(sl);
     }
 
-    // delete all lineSegments
-    for (LineSegment *ls : *lineSegments) {
-        delete ls;
-    }
-    lineSegments->clear();
+    EASY_END_BLOCK;
+
+    for (auto *ptr : lineSegments)
+        delete ptr;
+    lineSegments.clear();
+
+    EASY_BLOCK("Add segments");
     addSegments(scanVertical, width / lineSpacing, img);
     addSegments(scanHorizontal, height / lineSpacing, img);
+    EASY_END_BLOCK;
 }
 
 void RegionClassifier::addSegments(Scanline *scanlines, int scanlineCnt, uint8_t *img) {
     for (int j = 0; j < scanlineCnt; j++) {
-        Scanline *sl = &scanlines[j];
-        for (int i = 1; i < sl->edgeCnt - 1; i++) {
-            bool isWhite = sl->regionsIsWhite[i];
-            if (isWhite) {
-                int k = i + 1;
-                for (; k < sl->edgeCnt - 1; k++) {
-                    if (!sl->regionsIsWhite[k]) break;
-                }
-                int lineWidth = max(abs(sl->edgesX[i] - sl->edgesX[k]),
-                                    abs(sl->edgesY[i] - sl->edgesY[k]));
-                point_2d vecLeft =
-                        getGradientVector(sl->edgesX[i], sl->edgesY[i], lineWidth, img);
-                point_2d vecRight =
-                        getGradientVector(sl->edgesX[k], sl->edgesY[k], lineWidth, img);
-                LineSegment *lesLeft =
-                        new LineSegment(sl->edgesX[i], sl->edgesY[i], vecLeft.x, vecLeft.y);
-                lineSegments->push_back(lesLeft);
-                LineSegment *lesRight = new LineSegment(sl->edgesX[k], sl->edgesY[k],
-                                                        vecRight.x, vecRight.y);
-                lineSegments->push_back(lesRight);
-                lesLeft->link = lesRight;
-                lesRight->link = lesLeft;
-                i = k;
+        const Scanline &sl = scanlines[j];
+        for (int i = 1; i < sl.edgeCnt - 1; i++) {
+            bool isWhite = sl.regionsIsWhite[i];
+            if (!isWhite)
+                continue;
+            int k = i + 1;
+            for (; k < sl.edgeCnt - 1; k++) {
+                if (!sl.regionsIsWhite[k])
+                    break;
             }
+            int lineWidth = max(abs(sl.edgesX[i] - sl.edgesX[k]), abs(sl.edgesY[i] - sl.edgesY[k]));
+            point_2d vecLeft = getGradientVector(sl.edgesX[i], sl.edgesY[i], lineWidth, img);
+            point_2d vecRight = getGradientVector(sl.edgesX[k], sl.edgesY[k], lineWidth, img);
+            LineSegment *lesLeft = new LineSegment(sl.edgesX[i], sl.edgesY[i], vecLeft.x, vecLeft.y);
+            lineSegments.emplace_back(lesLeft);
+            LineSegment *lesRight = new LineSegment(sl.edgesX[k], sl.edgesY[k], vecRight.x, vecRight.y);
+            lineSegments.emplace_back(lesRight);
+            lesLeft->link = lesRight;
+            lesRight->link = lesLeft;
+            i = k;
         }
     }
 }
@@ -149,32 +180,32 @@ point_2d RegionClassifier::getGradientVector(int x, int y, int lineWidth, uint8_
     float gy = 0;
 
     if (lineWidth <= 3) {
-        const uint8_t ymm = getY(img, x-1, y-1);
-        const uint8_t yzm = getY(img, x  , y-1);
-        const uint8_t ypm = getY(img, x+1, y-1);
-        const uint8_t ymz = getY(img, x-1, y);
-        const uint8_t ypz = getY(img, x+1, y);
-        const uint8_t ymp = getY(img, x-1, y+1);
-        const uint8_t yzp = getY(img, x  , y+1);
-        const uint8_t ypp = getY(img, x+1, y+1);
+        const uint8_t ymm = getY(img, x - 1, y - 1);
+        const uint8_t yzm = getY(img, x, y - 1);
+        const uint8_t ypm = getY(img, x + 1, y - 1);
+        const uint8_t ymz = getY(img, x - 1, y);
+        const uint8_t ypz = getY(img, x + 1, y);
+        const uint8_t ymp = getY(img, x - 1, y + 1);
+        const uint8_t yzp = getY(img, x, y + 1);
+        const uint8_t ypp = getY(img, x + 1, y + 1);
 
-        gx = -(ymm + 2*ymz + ymp) + (ypm + 2*ypz + ypp);
-        gy = -(ymm + 2*yzm + ypm) + (ymp + 2*yzp + ypp);
+        gx = -(ymm + 2 * ymz + ymp) + (ypm + 2 * ypz + ypp);
+        gy = -(ymm + 2 * yzm + ypm) + (ymp + 2 * yzp + ypp);
     } else {
-        const uint8_t ymm = getY(img, x-2, y-2);
-        const uint8_t yzm = getY(img, x  , y-2);
-        const uint8_t ypm = getY(img, x+2, y-2);
-        const uint8_t ymz = getY(img, x-2, y);
-        const uint8_t ypz = getY(img, x+2, y);
-        const uint8_t ymp = getY(img, x-2, y+2);
-        const uint8_t yzp = getY(img, x  , y+2);
-        const uint8_t ypp = getY(img, x+2, y+2);
+        const uint8_t ymm = getY(img, x - 2, y - 2);
+        const uint8_t yzm = getY(img, x, y - 2);
+        const uint8_t ypm = getY(img, x + 2, y - 2);
+        const uint8_t ymz = getY(img, x - 2, y);
+        const uint8_t ypz = getY(img, x + 2, y);
+        const uint8_t ymp = getY(img, x - 2, y + 2);
+        const uint8_t yzp = getY(img, x, y + 2);
+        const uint8_t ypp = getY(img, x + 2, y + 2);
 
-        gx = -(ymm + 2*ymz + ymp) + (ypm + 2*ypz + ypp);
-        gy = -(ymm + 2*yzm + ypm) + (ymp + 2*yzp + ypp);
+        gx = -(ymm + 2 * ymz + ymp) + (ypm + 2 * ypz + ypp);
+        gy = -(ymm + 2 * yzm + ypm) + (ymp + 2 * yzp + ypp);
     }
 
-    float iSqrt = ext_math::invSqrt(gx * gx + gy * gy);
+    float iSqrt = invSqrt(gx * gx + gy * gy);
     gx *= iSqrt;
     gy *= iSqrt;
 
@@ -183,7 +214,8 @@ point_2d RegionClassifier::getGradientVector(int x, int y, int lineWidth, uint8_
         int pyL = y;
         for (int vy = -matchRadius; vy <= matchRadius; vy++) {
             int py = y + vy;
-            if (py < 0 || py >= height - 1) return point_2d(gx, gy);
+            if (py < 0 || py >= height - 1)
+                return point_2d(gx, gy);
             pattern[vy + matchRadius] = getY(img, x, py);
         }
         int minLeft = 0;
@@ -194,7 +226,8 @@ point_2d RegionClassifier::getGradientVector(int x, int y, int lineWidth, uint8_
                 int sum = 0;
                 for (int vy = -matchRadius; vy <= matchRadius; vy++) {
                     int ny = pyL + dy + vy;
-                    if (ny < 0 || ny >= height - 1) continue;
+                    if (ny < 0 || ny >= height - 1)
+                        continue;
                     int diff = pattern[vy + matchRadius] - getY(img, pxL, ny);
                     sum += diff * diff;
                 }
@@ -206,7 +239,8 @@ point_2d RegionClassifier::getGradientVector(int x, int y, int lineWidth, uint8_
             minLeft += min;
             pyL += minDy;
             pxL--;
-            if (pxL < 0) break;
+            if (pxL < 0)
+                break;
         }
 
         int pxR = x + 1;
@@ -219,7 +253,8 @@ point_2d RegionClassifier::getGradientVector(int x, int y, int lineWidth, uint8_
                 int sum = 0;
                 for (int vy = -matchRadius; vy <= matchRadius; vy++) {
                     int ny = pyR + dy + vy;
-                    if (ny < 0 || ny >= height - 1) continue;
+                    if (ny < 0 || ny >= height - 1)
+                        continue;
                     int diff = pattern[vy + matchRadius] - getY(img, pxR, ny);
                     sum += diff * diff;
                 }
@@ -231,7 +266,8 @@ point_2d RegionClassifier::getGradientVector(int x, int y, int lineWidth, uint8_
             minRight += min;
             pyR += minDy;
             pxR++;
-            if (pxR > width - 1) break;
+            if (pxR > width - 1)
+                break;
         }
         float vx = pxL - x;
         float vy = pyL - y;
@@ -252,11 +288,12 @@ point_2d RegionClassifier::getGradientVector(int x, int y, int lineWidth, uint8_
             gx = -vy;
             gy = vx;
         }
-        return point_2d(gx, gy);
+        return {gx, gy};
     } else {
         for (int vx = -matchRadius; vx <= matchRadius; vx++) {
             int px = x + vx;
-            if (px < 0 || px >= width) return point_2d(gx, gy);
+            if (px < 0 || px >= width)
+                return point_2d(gx, gy);
             pattern[vx + matchRadius] = getY(img, px, y);
         }
         int pxT = x;
@@ -269,7 +306,8 @@ point_2d RegionClassifier::getGradientVector(int x, int y, int lineWidth, uint8_
                 int sum = 0;
                 for (int vx = -matchRadius; vx <= matchRadius; vx++) {
                     int nx = pxT + dx + vx;
-                    if (nx < 0 || nx >= width - 1) continue;
+                    if (nx < 0 || nx >= width - 1)
+                        continue;
                     int diff = pattern[vx + matchRadius] - getY(img, nx, pyT);
                     sum += diff * diff;
                 }
@@ -281,7 +319,8 @@ point_2d RegionClassifier::getGradientVector(int x, int y, int lineWidth, uint8_
             minTop += min;
             pxT += minDx;
             pyT--;
-            if (pyT < 0) break;
+            if (pyT < 0)
+                break;
         }
 
         int pxB = x;
@@ -294,7 +333,8 @@ point_2d RegionClassifier::getGradientVector(int x, int y, int lineWidth, uint8_
                 int sum = 0;
                 for (int vx = -matchRadius; vx <= matchRadius; vx++) {
                     int nx = pxB + dx + vx;
-                    if (nx < 0 || nx >= width - 1) continue;
+                    if (nx < 0 || nx >= width - 1)
+                        continue;
                     int diff = pattern[vx + matchRadius] - getY(img, nx, pyB);
                     sum += diff * diff;
                 }
@@ -306,7 +346,8 @@ point_2d RegionClassifier::getGradientVector(int x, int y, int lineWidth, uint8_
             minBottom += min;
             pxB += minDx;
             pyB++;
-            if (pyB >= height - 1) break;
+            if (pyB >= height - 1)
+                break;
         }
         float vx = pxT - x;
         float vy = pyT - y;
@@ -355,7 +396,7 @@ void RegionClassifier::classifyWhiteRegions(Scanline *sl) {
                 }
                 if (maxJ >= 0) {
                     int lowerGap = max(abs(sl->edgesX[lowerIdx + 1] - sl->edgesX[maxJ]),
-                            abs(sl->edgesY[lowerIdx + 1] - sl->edgesY[maxJ]));
+                                       abs(sl->edgesY[lowerIdx + 1] - sl->edgesY[maxJ]));
                     if (lowerGap <= maxLineBorder) {
                         // find strongest upper edge
                         int minDiff = 0;
@@ -368,8 +409,8 @@ void RegionClassifier::classifyWhiteRegions(Scanline *sl) {
                             }
                         }
                         if (minK >= 0) {
-                            int upperGap = max(abs(sl->edgesX[minK] - sl->edgesX[i]),
-                                               abs(sl->edgesY[minK] - sl->edgesY[i]));
+                            int upperGap =
+                                    max(abs(sl->edgesX[minK] - sl->edgesX[i]), abs(sl->edgesY[minK] - sl->edgesY[i]));
                             int lineWidth = max(abs(sl->edgesX[minK] - sl->edgesX[maxJ]),
                                                 abs(sl->edgesY[minK] - sl->edgesY[maxJ]));
                             bool isOnlyGreen = true;
@@ -397,21 +438,19 @@ void RegionClassifier::classifyWhiteRegions(Scanline *sl) {
     }
 }
 
-void RegionClassifier::classifyGreenRegions(Scanline *sl,
-                                            FieldColorDetector *field) {
+void RegionClassifier::classifyGreenRegions(Scanline *sl, FieldColorDetector *field) {
     for (int i = 1; i < sl->edgeCnt - 1; i++) {
         sl->regionsIsGreen[i] = false;
         sl->regionsIsWhite[i] = false;
         if (field->isGreen(sl->regionsCy[i], sl->regionsCb[i], sl->regionsCr[i])) {
             sl->regionsIsGreen[i] = true;
         } else {
-            if (field->isGreen(sl->regionsCy[i - 1], sl->regionsCb[i - 1],
-                               sl->regionsCr[i - 1])) {
+            if (field->isGreen(sl->regionsCy[i - 1], sl->regionsCb[i - 1], sl->regionsCr[i - 1])) {
                 int dCy = sl->regionsCy[i] - sl->regionsCy[i - 1];
                 int dCb = sl->regionsCb[i] - sl->regionsCb[i - 1];
                 int dCr = sl->regionsCr[i] - sl->regionsCr[i - 1];
                 int dist = dCy * dCy + dCb * dCb + dCr * dCr;
-                if (dist < 160) {
+                if (dist < greenRegionColorDist) {
                     sl->regionsIsGreen[i] = true;
                 }
             }
@@ -419,17 +458,17 @@ void RegionClassifier::classifyGreenRegions(Scanline *sl,
     }
 
     for (int i = sl->edgeCnt - 2; i >= 0; i--) {
-        if (sl->regionsIsGreen[i]) continue;
+        if (sl->regionsIsGreen[i])
+            continue;
         if (field->isGreen(sl->regionsCy[i], sl->regionsCb[i], sl->regionsCr[i])) {
             sl->regionsIsGreen[i] = true;
         } else {
-            if (field->isGreen(sl->regionsCy[i + 1], sl->regionsCb[i + 1],
-                               sl->regionsCr[i + 1])) {
+            if (field->isGreen(sl->regionsCy[i + 1], sl->regionsCb[i + 1], sl->regionsCr[i + 1])) {
                 int dCy = sl->regionsCy[i] - sl->regionsCy[i + 1];
                 int dCb = sl->regionsCb[i] - sl->regionsCb[i + 1];
                 int dCr = sl->regionsCr[i] - sl->regionsCr[i + 1];
                 int dist = dCy * dCy + dCb * dCb + dCr * dCr;
-                if (dist < 160) {
+                if (dist < greenRegionColorDist) {
                     sl->regionsIsGreen[i] = true;
                 }
             }
@@ -439,8 +478,7 @@ void RegionClassifier::classifyGreenRegions(Scanline *sl,
 
 // estimate region-colors (median of 5 yCbCr-pixel-values)
 
-void RegionClassifier::getColorsFromRegions(uint8_t *img, Scanline *sl,
-                                            int dirX, int dirY) const {
+void RegionClassifier::getColorsFromRegions(uint8_t *img, Scanline *sl, int dirX, int dirY) const {
     int dataCy[5];
     int dataCb[5];
     int dataCr[5];
@@ -462,19 +500,13 @@ void RegionClassifier::getColorsFromRegions(uint8_t *img, Scanline *sl,
             dataCr[cnt] = getCr(img, px1, py1);
         }
         if (cnt == 5) {
-            sl->regionsCy[i] =
-                    ext_math::medianOfFive(dataCy[0], dataCy[1], dataCy[2], dataCy[3], dataCy[4]);
-            sl->regionsCb[i] =
-                    ext_math::medianOfFive(dataCb[0], dataCb[1], dataCb[2], dataCb[3], dataCb[4]);
-            sl->regionsCr[i] =
-                    ext_math::medianOfFive(dataCr[0], dataCr[1], dataCr[2], dataCr[3], dataCr[4]);
+            sl->regionsCy[i] = medianOfFive(dataCy[0], dataCy[1], dataCy[2], dataCy[3], dataCy[4]);
+            sl->regionsCb[i] = medianOfFive(dataCb[0], dataCb[1], dataCb[2], dataCb[3], dataCb[4]);
+            sl->regionsCr[i] = medianOfFive(dataCr[0], dataCr[1], dataCr[2], dataCr[3], dataCr[4]);
         } else if (cnt == 4) {
-            sl->regionsCy[i] =
-                    ext_math::medianOfThree(dataCy[0], (dataCy[1] + dataCy[2]) >> 1, dataCy[3]);
-            sl->regionsCb[i] =
-                    ext_math::medianOfThree(dataCb[0], (dataCb[1] + dataCb[2]) >> 1, dataCb[3]);
-            sl->regionsCr[i] =
-                    ext_math::medianOfThree(dataCr[0], (dataCr[1] + dataCr[2]) >> 1, dataCr[3]);
+            sl->regionsCy[i] = medianOfThree(dataCy[0], (dataCy[1] + dataCy[2]) >> 1, dataCy[3]);
+            sl->regionsCb[i] = medianOfThree(dataCb[0], (dataCb[1] + dataCb[2]) >> 1, dataCb[3]);
+            sl->regionsCr[i] = medianOfThree(dataCr[0], (dataCr[1] + dataCr[2]) >> 1, dataCr[3]);
         } else if (cnt == 3) {
             sl->regionsCy[i] = (dataCy[0] + 6 * dataCy[1] + dataCy[2]) >> 3;
             sl->regionsCb[i] = (dataCb[0] + 6 * dataCb[1] + dataCb[2]) >> 3;
@@ -497,9 +529,7 @@ void RegionClassifier::getColorsFromRegions(uint8_t *img, Scanline *sl,
 
 // search edges along scanline
 
-void RegionClassifier::scan(uint8_t *img, int xPos, int yPos,
-                            FieldColorDetector *field,
-                            Scanline *scanline) const {
+void RegionClassifier::scan(uint8_t *img, int xPos, int yPos, FieldColorDetector *field, Scanline *scanline) const {
     int vecX = scanline->vx;
     int vecY = scanline->vy;
     int lastCy = getY(img, xPos, yPos);
@@ -524,7 +554,8 @@ void RegionClassifier::scan(uint8_t *img, int xPos, int yPos,
         }
         if (g > gMax) {
             if (gMin < -tEdge) {
-                if (!addEdge(img, scanline, xPeak, yPeak, gMin, true)) break;
+                if (!addEdge(img, scanline, xPeak, yPeak, gMin, true))
+                    break;
             }
             gMax = g;
             gMin = tEdge;
@@ -533,7 +564,128 @@ void RegionClassifier::scan(uint8_t *img, int xPos, int yPos,
         }
         if (g < gMin) {
             if (gMax > tEdge) {
-                if (!addEdge(img, scanline, xPeak, yPeak, gMax, true)) break;
+                if (!addEdge(img, scanline, xPeak, yPeak, gMax, true))
+                    break;
+            }
+            gMin = g;
+            gMax = -tEdge;
+            xPeak = xPos - vecX / 2;
+            yPeak = yPos - vecY / 2;
+        }
+
+        if (isGreen != wasGreen) {
+            wasGreen = isGreen;
+        }
+        lastCy = cy;
+        xPos += vecX;
+        yPos += vecY;
+    }
+}
+
+void RegionClassifier::scan_avg_y(uint8_t *img, int xPos, int yPos, FieldColorDetector *field,
+                                  Scanline *scanline) const {
+    int vecX = scanline->vx;
+    int vecY = scanline->vy;
+    int lastCy = getY(img, xPos, yPos);
+    int lastCb = getCb(img, xPos, yPos);
+    int lastCr = getCr(img, xPos, yPos);
+    int gMax = -tEdge;
+    int gMin = tEdge;
+    int xPeak = xPos;
+    int yPeak = yPos;
+    xPos += vecX;
+    yPos += vecY;
+    bool wasGreen = field->isGreen(lastCy, lastCb, lastCr);
+    while (xPos >= 0 && xPos < width && yPos >= 2 && yPos < height - 2) {
+        int cy = ((int)getY(img, xPos, yPos - 2) + (int)getY(img, xPos, yPos - 1) + (int)getY(img, xPos, yPos) +
+                  (int)getY(img, xPos, yPos + 1) + (int)getY(img, xPos, yPos + 2)) /
+                 5;
+        int cb = ((int)getCb(img, xPos, yPos - 2) + (int)getCb(img, xPos, yPos - 1) + (int)getCb(img, xPos, yPos) +
+                  (int)getCb(img, xPos, yPos + 1) + (int)getCb(img, xPos, yPos + 2)) /
+                 5;
+        int cr = ((int)getCr(img, xPos, yPos - 2) + (int)getCr(img, xPos, yPos - 1) + (int)getCr(img, xPos, yPos) +
+                  (int)getCr(img, xPos, yPos + 1) + (int)getCr(img, xPos, yPos + 2)) /
+                 5;
+        int g = cy - lastCy;
+        bool isGreen = field->isGreen(cy, cb, cr);
+        bool greenEdge = wasGreen && !isGreen;
+        if (greenEdge) {
+            g = +tEdge + 1;
+        }
+        if (g > gMax) {
+            if (gMin < -tEdge) {
+                if (!addEdge(img, scanline, xPeak, yPeak, gMin, true))
+                    break;
+            }
+            gMax = g;
+            gMin = tEdge;
+            xPeak = xPos - vecX / 2;
+            yPeak = yPos - vecY / 2;
+        }
+        if (g < gMin) {
+            if (gMax > tEdge) {
+                if (!addEdge(img, scanline, xPeak, yPeak, gMax, true))
+                    break;
+            }
+            gMin = g;
+            gMax = -tEdge;
+            xPeak = xPos - vecX / 2;
+            yPeak = yPos - vecY / 2;
+        }
+
+        if (isGreen != wasGreen) {
+            wasGreen = isGreen;
+        }
+        lastCy = cy;
+        xPos += vecX;
+        yPos += vecY;
+    }
+}
+
+void RegionClassifier::scan_avg_x(uint8_t *img, int xPos, int yPos, FieldColorDetector *field,
+                                  Scanline *scanline) const {
+    int vecX = scanline->vx;
+    int vecY = scanline->vy;
+    int lastCy = getY(img, xPos, yPos);
+    int lastCb = getCb(img, xPos, yPos);
+    int lastCr = getCr(img, xPos, yPos);
+    int gMax = -tEdge;
+    int gMin = tEdge;
+    int xPeak = xPos;
+    int yPeak = yPos;
+    xPos += vecX;
+    yPos += vecY;
+    bool wasGreen = field->isGreen(lastCy, lastCb, lastCr);
+    while (xPos >= 2 && xPos < width - 2 && yPos >= 0 && yPos < height - 1) {
+        int cy = ((int)getY(img, xPos - 2, yPos) + (int)getY(img, xPos - 1, yPos) + (int)getY(img, xPos, yPos) +
+                  (int)getY(img, xPos + 1, yPos) + (int)getY(img, xPos + 2, yPos)) /
+                 5;
+        int cb = ((int)getCb(img, xPos - 2, yPos) + (int)getCb(img, xPos - 1, yPos) + (int)getCb(img, xPos, yPos) +
+                  (int)getCb(img, xPos + 1, yPos) + (int)getCb(img, xPos + 2, yPos)) /
+                 5;
+        int cr = ((int)getCr(img, xPos - 2, yPos) + (int)getCr(img, xPos - 1, yPos) + (int)getCr(img, xPos, yPos) +
+                  (int)getCr(img, xPos + 1, yPos) + (int)getCr(img, xPos + 2, yPos)) /
+                 5;
+        int g = cy - lastCy;
+        bool isGreen = field->isGreen(cy, cb, cr);
+        bool greenEdge = wasGreen && !isGreen;
+        if (greenEdge) {
+            g = +tEdge + 1;
+        }
+        if (g > gMax) {
+            if (gMin < -tEdge) {
+                if (!addEdge(img, scanline, xPeak, yPeak, gMin, true))
+                    break;
+            }
+            gMax = g;
+            gMin = tEdge;
+            xPeak = xPos - vecX / 2;
+            yPeak = yPos - vecY / 2;
+        }
+        if (g < gMin) {
+            if (gMax > tEdge) {
+                if (!addEdge(img, scanline, xPeak, yPeak, gMax, true))
+                    break;
             }
             gMin = g;
             gMax = -tEdge;
@@ -554,8 +706,7 @@ void RegionClassifier::scan(uint8_t *img, int xPos, int yPos,
 // returns false, when current edges-count per scanline is higher than
 // "maxEdgesPerScanline"
 
-bool RegionClassifier::addEdge(uint8_t *img, Scanline *scanline, int xPeak,
-                               int yPeak, int edgeIntensity,
+bool RegionClassifier::addEdge(uint8_t *img, Scanline *scanline, int xPeak, int yPeak, int edgeIntensity,
                                bool optimize) const {
     int xBest = xPeak;
     int yBest = yPeak;
@@ -570,11 +721,9 @@ bool RegionClassifier::addEdge(uint8_t *img, Scanline *scanline, int xPeak,
         xPeak -= vx * 2;
         yPeak -= vy * 2;
         int lastCy2 = getY(img, xPeak, yPeak);
-        ;
         xPeak += vx;
         yPeak += vy;
         int lastCy = getY(img, xPeak, yPeak);
-        ;
         int max = 0;
         for (int i = 0; i < 3; i++) {
             xPeak += vx;
@@ -613,10 +762,9 @@ bool RegionClassifier::addEdge(uint8_t *img, Scanline *scanline, int xPeak,
     }
 }
 
-vector<LineSegment *> RegionClassifier::getLineSegments(
-        const int *const fieldborder) {
+vector<LineSegment *> RegionClassifier::getLineSegments(const std::vector<int>& fieldborder) {
     vector<LineSegment *> segmentsOnField;
-    for (LineSegment *ls : *lineSegments) {
+    for (auto ls : lineSegments) {
         int py = (ls->y + ls->link->y) / 2;
         if (fieldborder[ls->x] <= py + 6) {
             segmentsOnField.push_back(ls);

@@ -1,16 +1,19 @@
-#ifndef POINT_2D_H
-#define POINT_2D_H
+#pragma once
+
+#include <stl_ext.h>
 
 #include <cfloat>
 #include <cmath>
+#include <iostream>
 #include <tuple>
-#include <fast_math.h>
+
+class CamPose;
 
 namespace htwk {
 
 struct point_2d {
-    float x;
-    float y;
+    float x = 0.f;
+    float y = 0.f;
 
     point_2d() = default;
     template <typename P>
@@ -46,7 +49,7 @@ struct point_2d {
     }
 
     friend point_2d operator*(float lhs, const point_2d& rhs) {
-        return rhs*lhs;
+        return rhs * lhs;
     }
 
     point_2d& operator/=(float rhs) {
@@ -61,56 +64,76 @@ struct point_2d {
     }
 
     constexpr point_2d operator-() const {
-        return point_2d(-x, -y);
+        return {-x, -y};
+    }
+
+    operator std::tuple<float, float>() const {
+        return std::make_tuple(x, y);
     }
 
     inline float norm() const {
-        return sqrtf(x*x+y*y);
+        return sqrtf(x * x + y * y);
     }
 
     inline float magnitude() const {
-        return sqrtf(x*x+y*y);
+        return sqrtf(x * x + y * y);
     }
 
     inline float norm_sqr() const {
-        return x*x+y*y;
+        return x * x + y * y;
     }
 
     inline point_2d mul_elem(const point_2d& b) const {
         return {x * b.x, y * b.y};
     }
 
-    inline float dot(const point_2d& b) const {
+    inline point_2d div_elem(const point_2d& b) const {
+        return {x / b.x, y / b.y};
+    }
+
+    float dot(const point_2d& b) const {
         return x * b.x + y * b.y;
     }
 
+    // result in [-M_PI..M_PI]
     float angle_to(const point_2d& b) const {
-      return std::acos(dot(b) / (norm() * b.norm()));
+        return normalizeRotation(std::atan2(b.y, b.x) - std::atan2(y, x));
     }
 
-    inline std::tuple<float,float> tuple() const {
+    std::tuple<float, float> tuple() const {
         return std::make_tuple(x, y);
     }
 
-    point_2d rotated(float angle) {
-        return {x * cosf(angle) - y * sinf(angle), x * sinf(angle) + y * cosf(angle)};
-    }
-
-    point_2d rotated_approx(float angle) {
-        float c = approx_cos(angle);
-        float s = approx_sin(angle);
-        return {x * c - y * s, x * s + y * c};
+    point_2d rotated(float angle) const {
+        return {x * std::cos(angle) - y * std::sin(angle), x * std::sin(angle) + y * std::cos(angle)};
     }
 
     point_2d normalized() const {
         float n = norm();
-        if (n == 0) return {0, 0};
+        if (n == 0)
+            return {0, 0};
         return {x / n, y / n};
     }
 
     point_2d normal() const {
         return {-y, x};
     }
+
+    float to_direction() const {
+        return std::atan2(y, x);
+    }
+
+    float dist(const point_2d& other) const {
+        return std::sqrt((x - other.x) * (x - other.x) + (y - other.y) * (y - other.y));
+    }
+
+    float dist_sqr(const point_2d& other) const {
+        return (x - other.x) * (x - other.x) + (y - other.y) * (y - other.y);
+    }
+
+    // Angular distance (in rad) between 2 points in relative coordinates. Don't use with absolute coordinates, it won't
+    // work. Convert them to relative first if you need it.
+    float angular_dist(const point_2d& other, const CamPose& cam_pose) const;
 
     friend bool operator==(const point_2d& lhs, const point_2d& rhs) {
         return lhs.x == rhs.x && lhs.y == rhs.y;
@@ -119,8 +142,24 @@ struct point_2d {
     friend bool operator!=(const point_2d& lhs, const point_2d& rhs) {
         return !(lhs == rhs);
     }
+
+    friend std::ostream& operator<<(std::ostream& os, const point_2d& p) {
+        os << "(" << p.x << ", " << p.y << ")";
+        return os;
+    }
+
+    void print() {
+        printf("x: %f, y: %f\n", x, y);
+    }
 };
 
 }  // namespace htwk
 
-#endif // POINT_2D_H
+namespace std {
+template <>
+struct hash<htwk::point_2d> {
+    size_t operator()(const htwk::point_2d& k) const {
+        return hash<float>()(k.x) ^ (hash<float>()(k.y) << 1);
+    }
+};
+}  // namespace std

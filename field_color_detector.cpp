@@ -4,17 +4,17 @@
 #include <cstring>
 #include <cmath>
 
-#include "ext_math.h"
+#include <easy/profiler.h>
+#include <stl_ext.h>
 
-using namespace ext_math;
 using namespace std;
 
 namespace htwk {
 
 const int FieldColorDetector::pixelSpacing=16;	//nur jeden 16ten Pixel in x- und y-Richtung scannen
 const int FieldColorDetector::minFieldArea=150; //min amount of pixels for initial green seed / carpet color detection
-const int FieldColorDetector::colorBorder=8;	//exclude extrem color values (0+colorBorder) < color < (255-colorBorder)
-const float FieldColorDetector::greenGain=2.0;	//gain for green threshold in maybeGreen function
+const int FieldColorDetector::colorBorder=11;	//exclude extrem color values (0+colorBorder) < color < (255-colorBorder)
+const float FieldColorDetector::greenGain=2;	//gain for green threshold in maybeGreen function
 const float FieldColorDetector::thetas[62]={-0.003928473492851304, 0.3267591297421786, 0.15024038619767252, -0.0026580701516830778, -0.06626938819648565,
 											-0.0918234800891045, -0.007024391380169659, -0.19444191475988953, 0.10805971362794498, -0.013870596388515415,
 											0.020367431009978596, 0.5006415354683456, 0.0523626396220556, 0.06796659398791673, 0.13091006086089688,
@@ -30,24 +30,15 @@ const float FieldColorDetector::thetas[62]={-0.003928473492851304, 0.32675912974
 											-0.06570198431532723, 0.07563040487570107};
 
 
-FieldColorDetector::FieldColorDetector(int _width, int _height, int8_t *_lutCb, int8_t *_lutCr)
-    : BaseDetector(_width, _height, _lutCb, _lutCr)
-{
-	greenCy=0;
-	greenCr=0;
-	greenCb=0;
-	resetArrays();
-
-}
-
-FieldColorDetector::~FieldColorDetector(){
-}
 
 /**
  * detects the yCbCr color of the playing field in the image.
  * saves two histograms with rating values for different color combinations
  */
-void FieldColorDetector::proceed(const uint8_t * const img) {
+void FieldColorDetector::proceed(const uint8_t *img) {
+    Timer t("FieldColorDetector", 50);
+    EASY_FUNCTION(profiler::colors::Blue100);
+
 	resetArrays();
 	searchInitialSeed(img);
 	extractFeatures(img,features);
@@ -68,8 +59,6 @@ void FieldColorDetector::setYCbCrCube(float* features){
 		minCb+=30*thetas[idx++]*feature;
 		minCr+=30*thetas[idx++]*feature;
 	}
-	float gY=3;
-	float gC=2;
 	if(minCy<1)minCy=1;
 	if(minCy>80)minCy=80;
 	if(minCb<1)minCb=1;
@@ -81,9 +70,9 @@ void FieldColorDetector::setYCbCrCube(float* features){
     this->minCy=(int)(greenCy-minCy*gy);
     this->minCb=(int)(greenCb-minCb*gc);
     this->minCr=(int)(greenCr-minCr*gc);
-	this->minCy2=(int)(greenCy-minCy*greenGain);
-	this->minCb2=(int)(greenCb-minCb*greenGain);
-	this->minCr2=(int)(greenCr-minCr*greenGain);
+    this->minCy2=(int)(greenCy-minCy*greenGain);
+    this->minCb2=(int)(greenCb-minCb*greenGain);
+    this->minCr2=(int)(greenCr-minCr*greenGain);
 
 	float maxCy=25+50*thetas[idx++];
 	float maxCb=8+15*thetas[idx++];
@@ -103,14 +92,14 @@ void FieldColorDetector::setYCbCrCube(float* features){
     this->maxCy=(int)(greenCy+maxCy*gy);
     this->maxCb=(int)(greenCb+maxCb*gc);
     this->maxCr=(int)(greenCr+maxCr*gc);
-	this->maxCy2=(int)(greenCy+maxCy*greenGain);
-	this->maxCb2=(int)(greenCb+maxCb*greenGain);
-	this->maxCr2=(int)(greenCr+maxCr*greenGain);
+    this->maxCy2=(int)(greenCy+maxCy*greenGain);
+    this->maxCb2=(int)(greenCb+maxCb*greenGain);
+    this->maxCr2=(int)(greenCr+maxCr*greenGain);
 }
 /**
  * extraction of image features
  */
-void FieldColorDetector::extractFeatures(const uint8_t * const img, float* features){
+void FieldColorDetector::extractFeatures(const uint8_t* img, float* features){
 	int cnt=0;
 	float meanY=0;
 	float varY=0;
@@ -147,7 +136,7 @@ void FieldColorDetector::extractFeatures(const uint8_t * const img, float* featu
 		}
 	}
 	varY=sqrtf(varY/cnt);
-	features[0]=greenCy/256;
+    features[0]=greenCy/256.f;
 	features[1]=varY/32;
 	features[2]=varCb/16;
 	features[3]=varCr/16;
@@ -173,7 +162,7 @@ void FieldColorDetector::searchInitialSeed(const uint8_t * const img){
 	}
 
 	//finding initial cr-value (later used as a seed color)
-	seedCr=clamp(colorBorder,getStableMin(histCr,minFieldArea),255-colorBorder);
+    seedCr=clamp(getStableMin(histCr,minFieldArea),colorBorder,255-colorBorder);
 
 	//build histogram of cb-channel for promising pixels
 	for(int y=0;y<height-1;y+=pixelSpacing){
@@ -186,7 +175,7 @@ void FieldColorDetector::searchInitialSeed(const uint8_t * const img){
 		}
 	}
 	//finding initial cb-value (later used as a seed color)
-	seedCb=clamp(colorBorder,getPeak(histCb),255-colorBorder);
+    seedCb=clamp(getPeak(histCb),colorBorder,255-colorBorder);
 
 	//build histogram of y-channel for promising pixels
 	for(int y=0;y<height-1;y+=pixelSpacing){
@@ -202,23 +191,23 @@ void FieldColorDetector::searchInitialSeed(const uint8_t * const img){
 		}
 	}
 	//finding initial y-value (later used as a seed color)
-	seedY=clamp(colorBorder,getPeak(histY),255-colorBorder);
+    seedY=clamp(getPeak(histY),colorBorder,255-colorBorder);
 	greenCy=seedY;
 	greenCb=seedCb;
 	greenCr=seedCr;
 }
 
 void FieldColorDetector::resetArrays() {
-    memset(histY,0,sizeof(histY));
-    memset(histCb,0,sizeof(histCb));
-    memset(histCr,0,sizeof(histCr));
+    histY.fill(0);
+    histCb.fill(0);
+    histCr.fill(0);
 }
 
 /**
  * only in a histogram with 256 bins: get the index of the bin with the lowest value but with a stabilization criteria ('thres').
  */
 
-int FieldColorDetector::getStableMin(const int* const hist, int thres) {
+int FieldColorDetector::getStableMin(const std::array<int, 256> &hist, int thres) {
 	int sum=0;
 	for(int i=0;i<256;i++){
 		sum+=hist[i];
@@ -232,7 +221,7 @@ int FieldColorDetector::getStableMin(const int* const hist, int thres) {
 /**
  * only in a histogram with 256 bins: get the index of the bin with the highest value
  */
-int FieldColorDetector::getPeak(const int* const hist) {
+int FieldColorDetector::getPeak(const std::array<int, 256> &hist) {
 	int max=0;
 	int maxIdx=0;
 	for(int i=0;i<256;i++){
